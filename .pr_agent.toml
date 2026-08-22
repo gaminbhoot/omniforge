@@ -1,0 +1,33 @@
+# Qodo PR-Agent Configuration — OmniForge (Q Branch Track)
+# Docs: https://qodo-merge-docs.qodo.ai/configuration/options/
+
+[config]
+model = "gpt-4o"
+publish_output = true
+verbosity_level = 2
+
+[pr_reviewer]
+extra_instructions = """
+Review this PR for the OmniForge Mission Control platform (TrueForge hackathon, TF-007).
+Focus on:
+- HITL policy correctness (never auto-execute CRITICAL actions without approval token)
+- Sandbox isolation (no host FS escape, no secret leakage)
+- MCP tool contract adherence (typed inputs/outputs, error handling)
+- TypeScript strictness and modularity
+"""
+require_score_review = true
+require_tests_review = true
+require_estimate_effort_to_review = true
+num_code_suggestions = 4
+
+[pr_description]
+final_update_message = true
+publish_labels = true
+generate_ai_title = true
+
+[pr_code_suggestions]
+num_code_suggestions = 3
+extra_instructions = "Suggest improvements that help win Double-O (TrueForge depth) and Savile Row (UI polish)."
+
+[pr_questions]
+extra_instructions = "Be concise and actionable. Link to file:line where relevant."
