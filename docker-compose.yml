@@ -1,0 +1,62 @@
+version: "3.9"
+services:
+  sandbox:
+    build:
+      context: ./packages/sandbox
+      dockerfile: Dockerfile
+    image: omniforge-sandbox:latest
+    container_name: omniforge-sandbox
+    volumes:
+      - ./packages/sandbox/workspace:/workspace:rw
+    working_dir: /workspace
+    networks:
+      - omniforge
+    mem_limit: 512m
+    cpus: 1.0
+    read_only: false
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    command: ["tail", "-f", "/dev/null"]
+
+  # Optional local DBs for DataForge demos (comment out if not needed)
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: omniforge
+      POSTGRES_PASSWORD: omniforge
+      POSTGRES_DB: omniforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - omniforge
+    profiles: ["with-db"]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+    networks:
+      - omniforge
+    profiles: ["with-db"]
+
+volumes:
+  pgdata:
+  chdata:
+
+networks:
+  omniforge:
+    name: omniforge
+    driver: bridge

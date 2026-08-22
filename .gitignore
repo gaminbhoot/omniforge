@@ -1,10 +1,101 @@
-node_modules/
+# ==========================================
+# 🌿 OmniForge Git Ignore Configuration
+# ==========================================
+
+# --- Environment & Credentials ---
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+credentials.json
+
+# --- Node.js & Dependencies ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+.npm/
+
+# --- Build Outputs & Bundles ---
 dist/
 build/
-.DS_Store
-*.log
-.coverage
+out/
+.next/
+.turbo/
+.cache/
+.parcel-cache/
+
+# --- Python & Virtual Environments ---
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.nox/
+
+# --- Databases, Session & State Files ---
+*.sqlite
+*.sqlite3
+*.db
+db.sqlite3
+session_cache/
+data/raw/
+data/processed/
+
+# --- TrueForge & Agent Runtimes ---
+.trueforge/
+agent_runs/
+sandbox_runs/
+logs/
+*.log
+
+# --- Docker & Sandbox Artifacts ---
+.docker/
+docker-compose.override.yml
+*.tar
+
+# --- OS & System Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- IDE & Editors ---
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# --- Temporary & Local Tool Directories ---
+.claude/
+tmp/

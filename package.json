@@ -1,0 +1,46 @@
+{
+  "name": "omniforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Autonomous Multi-Agent Mission Control Platform with Sandboxed Execution & HITL Governance — Mission TF-007",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/mcp-tools/*"
+  ],
+  "scripts": {
+    "all": "npm run build --workspaces --if-present",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:server": "npm --workspace apps/server run dev",
+    "dev:sandbox": "docker compose up --build sandbox",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,py}\"",
+    "test": "npm run test --workspaces --if-present",
+    "test:all": "npm run test --workspaces --if-present",
+    "prepare": "husky install || true",
+    "verify:once": "tsx scripts/codex-monitor.ts --once",
+    "verify:watch": "tsx scripts/codex-monitor.ts --watch --interval 12",
+    "verify:watch:fast": "tsx scripts/codex-monitor.ts --watch --interval 5 --skip-heavy",
+    "verify:spec": "tsx --eval \"import { SPEC } from \"./packages/verifier/src/spec.ts\"; console.log(JSON.stringify(SPEC,null,2))\"",
+    "monitor:codex": "tsx scripts/codex-monitor.ts --watch"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "husky": "^9.1.6"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaminbhoot/omniforge.git"
+  },
+  "license": "MIT"
+}
