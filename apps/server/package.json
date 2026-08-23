@@ -15,7 +15,7 @@
     "express": "^4.21.1",
     "ws": "^8.18.0",
     "zod": "^3.23.8",
-    "@omniforge/verifier": "workspace:*"
+    "@omniforge/verifier": "*"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

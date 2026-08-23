@@ -99,3 +99,6 @@ Thumbs.db
 # --- Temporary & Local Tool Directories ---
 .claude/
 tmp/
+
+# --- TypeScript Build Cache ---
+*.tsbuildinfo
