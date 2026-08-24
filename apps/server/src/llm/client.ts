@@ -1,29 +1,19 @@
 /**
- * LLM Client for OmniForge — Anthropic & Custom Endpoint Adapter
- * Configured for Claude / Muse Spark endpoints with tool calling support.
+ * Clean LLM Client Adapter for OmniForge
+ * Supports Anthropic, OpenAI, or custom API endpoints with tool calling.
  */
 
 export interface LLMConfig {
   baseUrl: string;
-  authToken?: string;
+  apiKey?: string;
   model: string;
-  sonnetModel: string;
-  opusModel: string;
-  haikuModel: string;
-  subagentModel: string;
-  enableToolSearch: boolean;
 }
 
 export function getLLMConfig(): LLMConfig {
   return {
-    baseUrl: process.env.ANTHROPIC_BASE_URL ?? "https://api.meta.ai",
-    authToken: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
-    model: process.env.ANTHROPIC_MODEL ?? "muse-spark-1.2-contributor[1m]",
-    sonnetModel: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? "muse-spark-1.2-contributor[1m]",
-    opusModel: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? "muse-spark-1.2-contributor[1m]",
-    haikuModel: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? "muse-spark-1.2-contributor[1m]",
-    subagentModel: process.env.CLAUDE_CODE_SUBAGENT_MODEL ?? "muse-spark-1.2-contributor[1m]",
-    enableToolSearch: process.env.ENABLE_TOOL_SEARCH === "true",
+    baseUrl: process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
+    apiKey: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.OPENAI_API_KEY,
+    model: process.env.ANTHROPIC_MODEL ?? "claude-3-5-sonnet-20241022",
   };
 }
 
@@ -52,7 +42,7 @@ export interface LLMResponse {
 }
 
 /**
- * Send request to the configured Anthropic-compatible API endpoint
+ * Send request to the configured LLM API endpoint
  */
 export async function sendLLMMessage(
   messages: ChatMessage[],
@@ -61,12 +51,10 @@ export async function sendLLMMessage(
 ): Promise<LLMResponse> {
   const config = getLLMConfig();
 
-  // If no auth token is provided yet, return graceful fallback
-  if (!config.authToken) {
-    console.warn("⚠️ ANTHROPIC_AUTH_TOKEN not set — using local rule-based response generator.");
+  if (!config.apiKey) {
     return {
-      text: "ANTHROPIC_AUTH_TOKEN not set. Set ANTHROPIC_AUTH_TOKEN in .env to activate live endpoint.",
-      modelUsed: `${config.model} (local-fallback)`,
+      text: "ANTHROPIC_API_KEY not set in .env. Running in local simulation mode.",
+      modelUsed: `${config.model} (local-mock)`,
     };
   }
 
@@ -94,12 +82,11 @@ export async function sendLLMMessage(
       "anthropic-version": "2023-06-01",
     };
 
-    // Support Bearer or x-api-key headers
-    if (config.authToken.startsWith("sk-")) {
-      headers["x-api-key"] = config.authToken;
+    if (config.apiKey.startsWith("sk-")) {
+      headers["x-api-key"] = config.apiKey;
     } else {
-      headers["Authorization"] = `Bearer ${config.authToken}`;
-      headers["x-api-key"] = config.authToken;
+      headers["Authorization"] = `Bearer ${config.apiKey}`;
+      headers["x-api-key"] = config.apiKey;
     }
 
     const response = await fetch(endpoint, {
@@ -138,7 +125,7 @@ export async function sendLLMMessage(
       raw: data,
     };
   } catch (error: any) {
-    console.error("LLM call failed:", error.message);
+    console.error("LLM call error:", error.message);
     throw error;
   }
 }
