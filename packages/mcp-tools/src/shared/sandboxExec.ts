@@ -4,15 +4,23 @@ import type { SandboxExecRequest, SandboxExecResult } from "./types.js";
 /**
  * Execute code inside the local sandbox container if available,
  * otherwise fall back to local subprocess (dev mode without Docker).
+ *
+ * Fail-closed in production: if Docker is required but unavailable,
+ * throw instead of falling back to host exec (SA-03).
  */
 export async function sandboxExec(req: SandboxExecRequest): Promise<SandboxExecResult> {
   const useDocker = process.env.SANDBOX_DOCKER !== "false" && process.env.SANDBOX_DOCKER !== "0";
+  const isProd = process.env.NODE_ENV === "production" || process.env.SANDBOX_DOCKER === "true";
   if (useDocker) {
     try {
       return await dockerExec(req);
-    } catch {
-      // fallback to local
+    } catch (e) {
+      if (isProd) throw new Error(`sandbox Docker required but unavailable: ${String((e as Error).message ?? e)}`);
+      // dev fallback with warning
+      console.warn("[sandboxExec] dockerExec failed, falling back to local (dev-only):", (e as Error).message);
     }
+  } else if (isProd) {
+    throw new Error("sandbox Docker required in production (SANDBOX_DOCKER=false is dev-only)");
   }
   return localExec(req);
 }
