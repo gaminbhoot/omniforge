@@ -2,6 +2,8 @@
 
 OmniForge is an **Autonomous Multi-Agent Mission Control Platform** engineered on top of [TrueForge](https://github.com/truefoundry/trueforge) and the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
 
+> **Kick-off alignment (Aug 24):** TrueForge runtime per [agent-harness-hackathon-kick-off](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off) = **MCP tools, skills (`SKILL.md`), sandboxing (Daytona + local Docker), approvals (HITL), subagents, context management, persistent sessions**. OmniForge implements all six: Skills = git-backed reusable instruction packs (`Settings → Skills` in harness or prompt templates in `apps/server/src/policies/`); Sandbox = local `omniforge-sandbox` (Docker) with **Daytona as hosted alternative** (`Settings → Sandbox providers` in harness).
+
 ---
 
 ## 🧩 System Architecture
@@ -17,11 +19,12 @@ flowchart TB
 
     subgraph Backend ["Layer 2: TrueForge Agent Orchestrator"]
         TF_ROUTER[Mission Dispatcher & Intent Classifier]
-        TF_STATE[Session Memory & State Compaction]
-        TF_GATE[HITL Policy Engine & Interceptor]
+        TF_SKILLS[Skills Engine — SKILL.md packs (git-backed)]
+        TF_STATE[Session Memory & State Compaction — Persistent Sessions]
+        TF_GATE[HITL Policy Engine & Interceptor — Approvals]
     end
 
-    subgraph Subagents ["Layer 3: Specialized Subagents"]
+    subgraph Subagents ["Layer 3: Specialized Subagents (Dynamic)"]
         A_OPS[🛠️ OpsForge Subagent: SRE & Incident Remediation]
         A_SEC[🛡️ SecurForge Subagent: CVE Exploit & Patch Verification]
         A_DATA[📊 DataForge Subagent: Sandboxed ETL & Schema Migrations]
@@ -31,11 +34,11 @@ flowchart TB
         MCP_SYS[🔌 System & Container MCP Server]
         MCP_SEC[🔌 Dependency & Git MCP Server]
         MCP_DB[🔌 Multi-DB & Data MCP Server]
-        DOCKER_BOX[📦 Isolated Docker Sandbox Runtime]
+        DOCKER_BOX[📦 Isolated Sandbox Runtime — local Docker + Daytona (hosted)]
     end
 
     subgraph QA ["Layer 5: Continuous Quality & Review"]
-        QODO_CI[🤖 Qodo PR Agent & Auto-Test Generation]
+        QODO_CI[🤖 Qodo — Full-Repo PR Reviews (app.qodo.ai + PR-Agent)]
     end
 
     UI <-->|WebSocket / SSE Stream| Backend

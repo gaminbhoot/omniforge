@@ -10,9 +10,9 @@ Welcome to the **OmniForge** documentation suite for **The Agent Harness Hackath
    - Phase-2 (25 Aug) gate audit: 12 findings with root causes, evidence, fixes, and schedule-aligned remediation plan (P2→P4).
 
 1. **[🏆 Hackathon Guide & Tracks (`HACKATHON_GUIDE.md`)](./HACKATHON_GUIDE.md)**
-   - Official event details, links, dates, and judging track strategies ($5K Supercomputer, $1K Mac Mini, iPads, etc.).
+   - Official event details, links, dates, and judging track strategies — **updated Aug 25 to kick-off guide** (Grand Prize DGX Spark, Q Branch Mac Mini, Universal Exports interviews, Field Report Keychron, Calling Card Logitech MX Master 3, Radio Traffic swag) + 7-step TrueForge / 5-step Qodo setup.
 2. **[🏗️ Technical Architecture Specification (`ARCHITECTURE_SPEC.md`)](./ARCHITECTURE_SPEC.md)**
-   - Deep-dive into the TrueForge orchestrator, 3 specialized subagents, FastMCP tool servers, Docker sandboxing, and Human-in-the-Loop policy matrix.
+   - Deep-dive into the TrueForge orchestrator, 3 specialized subagents, FastMCP tool servers, **Skills (`SKILL.md`)**, sandboxing (**Daytona hosted vs local Docker**), and Human-in-the-Loop policy matrix.
 3. **[🤖 Autonomous Agent & PR Workflow Guidelines (`AGENT_WORKFLOW_GUIDELINES.md`)](./AGENT_WORKFLOW_GUIDELINES.md)**
    - Operating standards for AI coding agents & developers: atomic grouped commits, PR branching templates, Qodo review loops, and zero-conflict sync protocols.
 4. **[🚀 Step-by-Step Implementation Playbook (`STEP_BY_STEP_PLAYBOOK.md`)](./STEP_BY_STEP_PLAYBOOK.md)**

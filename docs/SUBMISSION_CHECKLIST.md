@@ -76,6 +76,7 @@
 | **Project Name** | OmniForge |
 | **Tagline** | Autonomous Multi-Agent Mission Control Platform with Sandboxed Execution & HITL Governance |
 | **Repository URL** | [https://github.com/gaminbhoot/omniforge](https://github.com/gaminbhoot/omniforge) |
-| **Technologies Used** | TrueForge, Model Context Protocol (MCP), Docker, Qodo, Next.js, React, Tailwind CSS, TypeScript, Python |
-| **Tracks Targeted** | Double-O (Best TrueForge Use), Q Branch (Best Code Quality via Qodo), Savile Row (Best UI/UX) |
+| **Technologies Used** | TrueForge (MCP, Skills SKILL.md, Sandbox Daytona + Docker, Approvals, Subagents, Persistent Sessions), Qodo (app.qodo.ai + PR-Agent), Next.js, React, Tailwind CSS, TypeScript, Python (pandas/DuckDB) |
+| **Tracks Targeted** | Double-O Grand Prize (Best TrueForge — DGX Spark), Q Branch (Code Quality — Mac Mini), Universal Exports (Interview), Field Report (Blog — Keychron), Calling Card (Star draw — Logitech MX Master 3), Radio Traffic (Swag) — *Savile Row UI polish folded into Double-O/Q Branch per kick-off guide* |
+| **Kick-off Source** | [Getting Started Guide — Agent Harness Hackathon (Aug 24)](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off) — Steps to run `npx @truefoundry/trueforge`, add model/MCP/skill/sandbox, compose agent |
 

@@ -40,11 +40,15 @@ flowchart TB
 
 ---
 
-## 🚀 Quick Start (Phase 0 Scaffold)
+## 🚀 Quick Start (Phase 0 Scaffold + Kick-off Guide)
 
 ```bash
+# 0. TrueForge harness (Node 22+, per kick-off guide) — in a separate terminal
+npx @truefoundry/trueforge          # → http://localhost:8790  Settings → Models → add API key
+#   then Settings → Connectors (exa/deepwiki), Skills (SKILL.md), Sandbox → Daytona (or use local Docker below)
+
 # 1. env
-cp .env.example .env
+cp .env.example .env   # set ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL=https://api.meta.ai + ANTHROPIC_MODEL=muse-spark-1.2-contributor
 
 # 2. install (use /tmp cache if npm perms complain)
 npm install --cache /tmp/npm-cache
@@ -56,7 +60,7 @@ npm run dev
 npm run dev:web      # Mission Control → http://localhost:5173
 npm run dev:server   # Orchestrator  → http://localhost:3001/api/health
 
-# 4. sandbox (optional, Docker)
+# 4. sandbox (local Docker fallback — Daytona is the hosted alternative in harness)
 docker compose up -d sandbox
 docker exec omniforge-sandbox python /usr/local/bin/runner.py <<< '{"language":"python","code":"print(42)"}'
 
@@ -64,7 +68,7 @@ docker exec omniforge-sandbox python /usr/local/bin/runner.py <<< '{"language":"
 npm run build
 ```
 
-> Server is a Phase 0 stub mirroring TrueForge's API — swap `apps/server/src/orchestrator.ts` internals on Aug 24 when the harness drops. Web needs zero changes.
+> **Harness note:** OmniForge server stub (`apps/server/src/orchestrator.ts`) now talks to a real TrueForge harness at `http://localhost:8790` (SQLite). Agents `ops-forge/secur-forge/data-forge` on `anthropic/muse-spark-12` with `sandbox:true` + `mcp_servers:[deepwiki, exa]` are already wired; `npx trueforge` is the source of truth per [kick-off guide](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off).
 
 ## 📂 Monorepo Layout
 
@@ -92,7 +96,14 @@ Explore our comprehensive guides in the [`docs/`](./docs) directory:
 
 ## 🏆 Targeted Hackathon Tracks
 
-* 🥇 **Double-O Track ($5,000 NVIDIA DGX Spark):** Deep use of TrueForge runtime, MCP tools, Docker sandboxing, and HITL approval gates.
-* 🥈 **Q Branch Track ($1,000 Apple Mac Mini):** Continuous automated PR reviews and test generation using Qodo.
-* 🥉 **Savile Row Track (Apple iPads):** Modern mission-control UI with live execution streams, sandbox terminal, and interactive approval modals.
+*Per [Getting Started Guide (Aug 24)](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off) — $10,000 total:*
+
+* 🥇 **Double-O / Grand Prize ($5,000 NVIDIA DGX Spark):** Deep use of TrueForge runtime — real MCP tools, sandboxed execution (Docker/Daytona), HITL approvals, subagents, persistent sessions, skills, context management.
+* 🥈 **Q Branch (Mac Mini):** Code quality with **Qodo throughout development** (via [app.qodo.ai](https://app.qodo.ai/signin) + PR-Agent) — repo-context reviews, fix what it finds before merging.
+* 🌐 **Universal Exports (Interview at TrueFoundry):** Top projects earn interview — no separate track to enter.
+* 📝 **Field Report (Keychron Keyboard):** Best blog post on Dev.to/Hashnode/Medium.
+* ⭐ **Calling Card (Logitech MX Master 3):** Star [truefoundry/trueforge](https://github.com/truefoundry/trueforge) → draw entry, no project required.
+* 📻 **Radio Traffic (Swag ×10):** Top 10 social posts tagging `@WeMakeDevs` + `@TrueFoundry`.
+
+> **Savile Row (UI/UX iPad)** was the pre-kickoff “Best UI” track — kick-off guide folds that polish into Double-O/Q Branch. The `ModuleSwitcher` + `AgentTimeline` + `TerminalStream` + `ApprovalModal` still win your video; keep it.
 
