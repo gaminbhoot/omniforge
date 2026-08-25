@@ -25,7 +25,8 @@
     "verify:watch": "tsx scripts/codex-monitor.ts --watch --interval 12",
     "verify:watch:fast": "tsx scripts/codex-monitor.ts --watch --interval 5 --skip-heavy",
     "verify:spec": "tsx --eval \"import { SPEC } from \"./packages/verifier/src/spec.ts\"; console.log(JSON.stringify(SPEC,null,2))\"",
-    "monitor:codex": "tsx scripts/codex-monitor.ts --watch"
+    "monitor:codex": "tsx scripts/codex-monitor.ts --watch",
+    "postinstall": "node scripts/patch-anthropic-eager.js || true"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.67.0",
@@ -45,5 +46,8 @@
     "type": "git",
     "url": "https://github.com/gaminbhoot/omniforge.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@truefoundry/trueforge": "^0.1.4"
+  }
 }

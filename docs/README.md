@@ -6,6 +6,9 @@ Welcome to the **OmniForge** documentation suite for **The Agent Harness Hackath
 
 ## 📑 Documentation Suite
 
+0. **[🛡️ Security Audit Report — SAE Deep Dive (`SECURITY_AUDIT_REPORT.md`)](./SECURITY_AUDIT_REPORT.md)**
+   - Phase-2 (25 Aug) gate audit: 12 findings with root causes, evidence, fixes, and schedule-aligned remediation plan (P2→P4).
+
 1. **[🏆 Hackathon Guide & Tracks (`HACKATHON_GUIDE.md`)](./HACKATHON_GUIDE.md)**
    - Official event details, links, dates, and judging track strategies ($5K Supercomputer, $1K Mac Mini, iPads, etc.).
 2. **[🏗️ Technical Architecture Specification (`ARCHITECTURE_SPEC.md`)](./ARCHITECTURE_SPEC.md)**
@@ -16,6 +19,8 @@ Welcome to the **OmniForge** documentation suite for **The Agent Harness Hackath
    - Phase-by-phase action plan covering pre-hackathon setup, Day 1 kickoff, development milestones, and hardening.
 5. **[📦 Final Submission & Deliverables Checklist (`SUBMISSION_CHECKLIST.md`)](./SUBMISSION_CHECKLIST.md)**
    - Complete deliverables checklist, 3-minute video demo script, and hackathon submission portal guide.
+
+> **SAE Audit (25 Aug):** For the current Phase 2 security posture see [`SECURITY_AUDIT_REPORT.md`](./SECURITY_AUDIT_REPORT.md) — 1 Critical (local `.env`) + 6 Medium/High hardenings, all mapped to P2/P3 fixes.
 
 ---
 
