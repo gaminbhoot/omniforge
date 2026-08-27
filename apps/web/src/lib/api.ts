@@ -1,5 +1,18 @@
 const BASE = "";
 
+async function request(path: string, init?: RequestInit): Promise<any> {
+  const r = await fetch(`${BASE}${path}`, init);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try {
+      const body = await r.json();
+      if (body?.error) msg = body.error;
+    } catch { /* non-JSON error body */ }
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
 export type Session = {
   id: string;
   mission: { type: string; confidence: number; reason: string };
@@ -10,23 +23,17 @@ export type Session = {
 };
 
 export async function createMission(prompt: string): Promise<Session> {
-  const r = await fetch(`${BASE}/api/missions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  return request("/api/missions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
 }
 export async function listMissions(): Promise<Session[]> {
-  const r = await fetch(`${BASE}/api/missions`);
-  return r.json();
+  return request("/api/missions");
 }
 export async function getMission(id: string): Promise<Session> {
-  const r = await fetch(`${BASE}/api/missions/${id}`);
-  return r.json();
+  return request(`/api/missions/${id}`);
 }
 export async function proposeTool(id: string, tool: string, args: any): Promise<Session> {
-  const r = await fetch(`${BASE}/api/missions/${id}/tools`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tool, args }) });
-  return r.json();
+  return request(`/api/missions/${id}/tools`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tool, args }) });
 }
 export async function resolveApproval(id: string, approved: boolean, feedback?: string): Promise<Session> {
-  const r = await fetch(`${BASE}/api/missions/${id}/approval`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved, feedback }) });
-  return r.json();
+  return request(`/api/missions/${id}/approval`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved, feedback }) });
 }

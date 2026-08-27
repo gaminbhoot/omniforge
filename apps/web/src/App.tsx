@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CockpitLayout } from "./components/CockpitLayout";
 import { ModuleSwitcher } from "./components/ModuleSwitcher";
 import { AgentTimeline } from "./components/AgentTimeline";
@@ -42,6 +42,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const dismissedRef = useRef<string | null>(null);
 
   useEffect(() => {
     setPrompt(PRESETS[module].prompt);
@@ -54,7 +55,7 @@ export default function App() {
       try {
         const s = await getMission(session.id);
         setSession(s);
-        if (s.pendingApproval) setApprovalOpen(true);
+        if (s.pendingApproval && s.pendingApproval.id !== dismissedRef.current) setApprovalOpen(true);
       } catch {}
     }, 1500);
     return () => clearInterval(id);
@@ -65,6 +66,7 @@ export default function App() {
     try {
       const s = await createMission(prompt);
       setSession(s);
+      dismissedRef.current = null;
     } catch (e: any) {
       alert(String(e.message ?? e));
     } finally {
@@ -78,7 +80,10 @@ export default function App() {
     try {
       const s = await proposeTool(session.id, tool, args);
       setSession(s);
+      dismissedRef.current = null;
       if (s.pendingApproval) setApprovalOpen(true);
+    } catch (e: any) {
+      alert(String(e.message ?? e));
     } finally {
       setBusy(false);
     }
@@ -86,15 +91,23 @@ export default function App() {
 
   async function approve() {
     if (!session) return;
-    const s = await resolveApproval(session.id, true);
-    setSession(s);
-    setApprovalOpen(false);
+    try {
+      const s = await resolveApproval(session.id, true);
+      setSession(s);
+      setApprovalOpen(false);
+    } catch (e: any) {
+      alert(String(e.message ?? e));
+    }
   }
   async function reject(feedback: string) {
     if (!session) return;
-    const s = await resolveApproval(session.id, false, feedback);
-    setSession(s);
-    setApprovalOpen(false);
+    try {
+      const s = await resolveApproval(session.id, false, feedback);
+      setSession(s);
+      setApprovalOpen(false);
+    } catch (e: any) {
+      alert(String(e.message ?? e));
+    }
   }
 
   const lastToolOutput = [...(session?.steps ?? [])].reverse().find((s) => s.output)?.output;
@@ -106,12 +119,15 @@ export default function App() {
         request={session?.pendingApproval ?? null}
         onApprove={approve}
         onReject={reject}
-        onClose={() => setApprovalOpen(false)}
+        onClose={() => {
+          dismissedRef.current = session?.pendingApproval?.id ?? null;
+          setApprovalOpen(false);
+        }}
       />
       <CockpitLayout
       header={
         <div className="flex items-center gap-3">
-          <span className="hidden md:inline text-xs font-mono px-2 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent">Phase 0 Scaffold · Live</span>
+          <span className="hidden md:inline text-xs font-mono px-2 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent">Phase 3 Cockpit · Live</span>
           <a href="/api/health" target="_blank" className="text-xs text-muted hover:text-white underline">health</a>
         </div>
       }
