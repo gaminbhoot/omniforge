@@ -51,6 +51,9 @@ export function createSystemMcpServer() {
     "Inspect running container metadata (LOW)",
     { container: z.string() },
     async ({ container }) => {
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(container)) {
+        return { content: [{ type: "text", text: `BLOCKED: invalid container name — refusing to run (got ${JSON.stringify(container)})` }] };
+      }
       const result = await sandboxExec({
         language: "bash",
         code: `echo '{"container":"${container}","status":"running","image":"mock:latest","startedAt":"2026-08-23T00:00:00Z"}'`,

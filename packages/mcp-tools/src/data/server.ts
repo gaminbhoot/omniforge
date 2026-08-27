@@ -36,6 +36,11 @@ export function createDataMcpServer() {
       if (/\b(UPDATE|DELETE|DROP|INSERT|ALTER|TRUNCATE)\b/i.test(sql)) {
         return { content: [{ type: "text", text: `BLOCKED: write keyword detected — use execute_write (CRITICAL/HITL) instead. sql=${sql}` }] };
       }
+      // Extra guard: these characters would break out of the sandboxed Python
+      // string interpolation below — reject instead of trying to escape.
+      if (/[;\\]/.test(sql) || /--/.test(sql) || /\/\*/.test(sql)) {
+        return { content: [{ type: "text", text: `BLOCKED: sql contains characters not allowed in readonly demo queries (; \\ -- /*). sql=${sql}` }] };
+      }
       // In prod, routes to real DB via connection string. Here we run a demo DuckDB snippet in sandbox.
       const result = await sandboxExec({
         language: "python",
@@ -55,6 +60,11 @@ print(con.execute("""${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}""").fetchdf
     "Preview first N rows of a CSV in sandbox (LOW)",
     { path: z.string().default("/workspace/sample.csv"), n: z.number().default(5) },
     async ({ path, n }) => {
+      const safePath = /^\/?[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(path);
+      const safeN = Number.isInteger(n) && n >= 1 && n <= 100;
+      if (!safePath || !safeN) {
+        return { content: [{ type: "text", text: `BLOCKED: invalid path/n — refusing to run (path=${JSON.stringify(path)} n=${JSON.stringify(n)})` }] };
+      }
       const result = await sandboxExec({
         language: "python",
         code: `import pandas as pd, pathlib\np=pathlib.Path("${path}")\nprint(pd.read_csv(p).head(${n}).to_string() if p.exists() else "[mock] ${path} not found — upload a CSV to sandbox workspace")`,

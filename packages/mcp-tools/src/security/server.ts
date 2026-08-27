@@ -44,6 +44,11 @@ export function createSecurityMcpServer() {
     "Show git diff for a path or commit range (LOW)",
     { path: z.string().default("."), base: z.string().optional() },
     async ({ path, base }) => {
+      const safePath = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(path);
+      const safeBase = !base || /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(base);
+      if (!safePath || !safeBase) {
+        return { content: [{ type: "text", text: `BLOCKED: invalid path/base — refusing to run (path=${JSON.stringify(path)} base=${JSON.stringify(base)})` }] };
+      }
       const code = base
         ? `git diff ${base}..HEAD -- ${path} 2>&1 | head -n 200 || echo "[mock diff] no git repo"`
         : `git diff -- ${path} 2>&1 | head -n 200 || echo "[mock diff] no git repo"`;
