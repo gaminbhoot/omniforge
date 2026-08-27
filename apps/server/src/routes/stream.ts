@@ -12,7 +12,8 @@ streamRouter.get("/:id", (req, res) => {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
-    "Access-Control-Allow-Origin": "*",
+    // CORS is enforced by the app-level cors({ origin: CORS_ORIGIN }) middleware
+    // — no wildcard here (SA-05).
   });
 
   const send = () => {
