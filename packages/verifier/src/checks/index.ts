@@ -139,7 +139,7 @@ export function checkSandboxIsolation(diff: string): CheckResult {
   // Dangerous: raw child_process / exec outside sandboxExec
   const dangerous = [/child_process/, /execSync\s*\(/, /spawn\s*\(/, /Docker.*host/i];
   const diffHasDangerous = dangerous.some(re => grepDiff(diff, re));
-  const usesSandboxExec = diff.includes("sandboxExec") || readFileSync("packages/mcp-tools/src/shared/sandboxExec.ts","utf-8").length > 0;
+  const usesSandboxExec = diff.includes("sandboxExec") || (existsSync("packages/mcp-tools/src/shared/sandboxExec.ts") && readFileSync("packages/mcp-tools/src/shared/sandboxExec.ts","utf-8").length > 0);
   if (diffHasDangerous && !diff.includes("sandboxExec")) {
     // allow if it's in verifier/scripts itself
     const isVerifierOnly = diff.split("\n").every(l => l.includes("packages/verifier") || l.includes("scripts/codex-monitor"));
