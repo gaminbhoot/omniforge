@@ -53,7 +53,8 @@ const POLICIES: Record<string, PolicyRule> = {
 export function evaluate(tool: string, args: Record<string, unknown>): { rule: PolicyRule; needsApproval: boolean } {
   const rule = POLICIES[tool] ?? { risk: "HIGH" as RiskLevel, requiresApproval: true, executionMode: "host", description: "Unknown tool — default to HIGH (safe)" };
 
-  // Heuristic upgrades — e.g. execute_write with dryRun:false is CRITICAL, dryRun:true is still HIGH
+  // Heuristic upgrades — execute_write dryRun:false is CRITICAL; a dryRun:true
+  // still keeps the CRITICAL gate (safe default: every write needs approval).
   if (tool === "execute_write" && (args as any)?.dryRun === false) {
     return { rule: { ...rule, risk: "CRITICAL" }, needsApproval: true };
   }

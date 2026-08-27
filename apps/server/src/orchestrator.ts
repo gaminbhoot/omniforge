@@ -29,6 +29,11 @@ export type Session = {
 
 const sessions = new Map<string, Session>();
 
+/** Collision-proof step id (Date.now() alone collides on rapid calls) */
+function stepId(): string {
+  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export function createSession(userInput: string): Session {
   const mission = classifyIntent(userInput);
   const subagent = subagentFor(mission);
@@ -38,9 +43,9 @@ export function createSession(userInput: string): Session {
     mission,
     subagent,
     steps: [
-      { id: `s_${Date.now()}`, role: "user", text: userInput, timestamp: new Date().toISOString() },
+      { id: stepId(), role: "user", text: userInput, timestamp: new Date().toISOString() },
       {
-        id: `s_${Date.now() + 1}`,
+        id: stepId(),
         role: "agent",
         text: `Mission classified as **${mission.type}** (${mission.reason}) → dispatching to **${subagent}**.`,
         timestamp: new Date().toISOString(),
@@ -68,6 +73,11 @@ export function listSessions(): Session[] {
 export function proposeTool(sessionId: string, tool: string, args: Record<string, unknown>): Session {
   const session = sessions.get(sessionId);
   if (!session) throw new Error(`session not found: ${sessionId}`);
+  if (session.status === "awaiting_approval") {
+    // Mission is paused at a HITL gate — no side effects (even LOW/MEDIUM)
+    // and no overwriting of the pending ApprovalRequest until it is resolved.
+    throw new Error(`approval pending for "${session.pendingApproval?.tool}" — resolve the HITL gate before proposing more tools`);
+  }
 
   const { rule, needsApproval } = evaluate(tool, args);
 
@@ -76,7 +86,7 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
     session.pendingApproval = approval;
     session.status = "awaiting_approval";
     session.steps.push({
-      id: `s_${Date.now()}`,
+      id: stepId(),
       role: "hitl",
       text: `⛔ HITL gate — **${tool}** (${rule.risk}) requires approval.`,
       tool,
@@ -86,7 +96,7 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
     });
   } else {
     session.steps.push({
-      id: `s_${Date.now()}`,
+      id: stepId(),
       role: "tool",
       text: `▶ ${tool} (${rule.risk}) — auto-executed in ${rule.executionMode}`,
       tool,
@@ -107,7 +117,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
   session.pendingApproval = null;
   session.status = approved ? "running" : "done";
   session.steps.push({
-    id: `s_${Date.now()}`,
+    id: stepId(),
     role: approved ? "tool" : "agent",
     text: approved
       ? `✅ Approved — executing **${req.tool}** on ${req.executionMode}…`
@@ -119,7 +129,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
   });
   if (approved) {
     session.steps.push({
-      id: `s_${Date.now() + 1}`,
+      id: stepId(),
       role: "agent",
       text: `Mission step completed. Awaiting next instruction or auto-advancing.`,
       timestamp: new Date().toISOString(),

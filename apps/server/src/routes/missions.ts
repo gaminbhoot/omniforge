@@ -24,12 +24,16 @@ missionsRouter.get("/:id", (req, res) => {
 // POST /api/missions/:id/tools — propose a tool call (triggers HITL if needed)
 missionsRouter.post("/:id/tools", (req, res) => {
   const { tool, args } = req.body ?? {};
-  if (!tool) return res.status(400).json({ error: "tool required" });
+  if (typeof tool !== "string" || !tool) return res.status(400).json({ error: "tool (string) required" });
+  if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) {
+    return res.status(400).json({ error: "args (object) required" });
+  }
   try {
     const session = proposeTool(req.params.id, tool, args ?? {});
     res.json(session);
   } catch (e: any) {
-    res.status(404).json({ error: e.message });
+    const code = String(e?.message ?? "").includes("not found") ? 404 : 409;
+    res.status(code).json({ error: e.message });
   }
 });
 
