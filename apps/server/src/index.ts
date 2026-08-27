@@ -3,6 +3,7 @@ import cors from "cors";
 import { missionsRouter } from "./routes/missions.js";
 import { streamRouter } from "./routes/stream.js";
 import { verifyRouter } from "./routes/verify.js";
+import { harnessRouter } from "./routes/harness.js";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
@@ -18,6 +19,7 @@ app.get("/api/health", (_req, res) =>
 app.use("/api/missions", missionsRouter);
 app.use("/api/stream", streamRouter);
 app.use("/api/verify", verifyRouter);
+app.use("/api/harness", harnessRouter);
 
 // Fallback for unknown routes
 app.use((_req, res) => res.status(404).json({ error: "not found" }));
@@ -26,5 +28,6 @@ app.listen(PORT, () => {
   console.log(`⚡ OmniForge server listening on http://localhost:${PORT}`);
   console.log(`   CORS origin: ${CORS_ORIGIN}`);
   console.log(`   Health:      http://localhost:${PORT}/api/health`);
+  console.log(`   Harness:     http://localhost:${PORT}/api/harness/health  (proxies ${process.env.TRUEFORGE_API_URL ?? "http://localhost:8790"}/api/v1)`);
   console.log(`   Verify:      http://localhost:${PORT}/api/verify/latest  (Muse audits Codex fixes)`);
 });

@@ -6,6 +6,7 @@
 
 import { classifyIntent, subagentFor } from "./policies/router.js";
 import { evaluate, createApprovalRequest, type ApprovalRequest } from "./policies/hitl.js";
+import { sandboxExec } from "@omniforge/mcp-tools/shared/sandboxExec";
 
 export type Step = {
   id: string;
@@ -15,6 +16,8 @@ export type Step = {
   args?: Record<string, unknown>;
   output?: string;
   risk?: string;
+  /** One-click alternative proposed after a rejection (agent replan) */
+  suggest?: { tool: string; args: Record<string, unknown> };
   timestamp: string;
 };
 
@@ -95,19 +98,53 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
       timestamp: new Date().toISOString(),
     });
   } else {
-    session.steps.push({
+    const live = SANDBOX_TOOLS.has(tool);
+    const step: Step = {
       id: stepId(),
       role: "tool",
-      text: `▶ ${tool} (${rule.risk}) — auto-executed in ${rule.executionMode}`,
+      text: `▶ ${tool} (${rule.risk}) — ${live ? "executing live in sandbox" : `auto-executed in ${rule.executionMode}`}`,
       tool,
       args,
-      output: mockOutput(tool, args),
+      output: live ? undefined : mockOutput(tool, args),
       risk: rule.risk,
       timestamp: new Date().toISOString(),
-    });
+    };
+    session.steps.push(step);
+    if (live) execInSandbox(tool, args, step);
   }
   return session;
 }
+
+/**
+ * Replan playbook — what the agent does instead when a gated action is
+ * rejected. The human's feedback becomes the next observation; the agent
+ * proposes a safer alternative (one-click in the Cockpit UI).
+ */
+const REPLANS: Record<string, { text: string; suggest?: { tool: string; args: Record<string, unknown> } }> = {
+  restart_service: {
+    text: "replanning: running a deeper live diagnostic first — will re-propose a narrower restart only if the evidence supports it",
+    suggest: {
+      tool: "run_diagnostic_script",
+      args: { language: "python", code: "print('replan: deep health probe after rejected restart')\nprint('p99 latency, error rate, dependency status — collecting…')" },
+    },
+  },
+  create_patch_pr: {
+    text: "replanning: refining the patch with regression tests before requesting human review again",
+    suggest: {
+      tool: "test_exploit",
+      args: { cve: "re-verify after patch refinement", language: "python", exploit_code: "print('replan: regression check on patched code path')" },
+    },
+  },
+  execute_write: {
+    text: "replanning: preparing a dry-run preview of the exact statements so nothing touches the target until reviewed",
+    suggest: {
+      tool: "execute_write",
+      args: { sql: "SELECT * FROM staging.orders LIMIT 10  -- dry-run preview", connection: "postgres", dryRun: true },
+    },
+  },
+};
+
+const GENERIC_REPLAN = "replanning: incorporating your feedback and preparing a safer alternative for review";
 
 export function resolveApproval(sessionId: string, approved: boolean, feedback?: string): Session {
   const session = sessions.get(sessionId);
@@ -115,27 +152,62 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
   const req = session.pendingApproval;
   req.status = approved ? "approved" : "rejected";
   session.pendingApproval = null;
-  session.status = approved ? "running" : "done";
-  session.steps.push({
-    id: stepId(),
-    role: approved ? "tool" : "agent",
-    text: approved
-      ? `✅ Approved — executing **${req.tool}** on ${req.executionMode}…`
-      : `❌ Rejected — ${feedback ?? "operator rejected the action"}. Halting mission.`,
-    tool: req.tool,
-    args: req.args,
-    output: approved ? mockOutput(req.tool, req.args) : undefined,
-    timestamp: new Date().toISOString(),
-  });
   if (approved) {
+    session.status = "running";
+    session.steps.push({
+      id: stepId(),
+      role: "tool",
+      text: `✅ Approved — executing **${req.tool}** on ${req.executionMode}…`,
+      tool: req.tool,
+      args: req.args,
+      output: mockOutput(req.tool, req.args),
+      timestamp: new Date().toISOString(),
+    });
     session.steps.push({
       id: stepId(),
       role: "agent",
       text: `Mission step completed. Awaiting next instruction or auto-advancing.`,
       timestamp: new Date().toISOString(),
     });
+  } else {
+    // Rejected — the feedback becomes the agent's next observation and the
+    // mission CONTINUES with a safer replan (not a halt).
+    session.status = "running";
+    const replan = REPLANS[req.tool] ?? { text: GENERIC_REPLAN };
+    session.steps.push({
+      id: stepId(),
+      role: "agent",
+      text: `❌ Rejected — ${feedback ?? "operator rejected the action"}. Agent ${replan.text}.`,
+      tool: req.tool,
+      args: req.args,
+      suggest: replan.suggest,
+      timestamp: new Date().toISOString(),
+    });
   }
   return session;
+}
+
+/** MEDIUM tools that genuinely execute code — run for real via sandboxExec (Docker, dev fallback local) */
+const SANDBOX_TOOLS = new Set(["run_diagnostic_script", "test_exploit", "run_etl_script"]);
+
+function execInSandbox(tool: string, args: Record<string, unknown>, step: Step): void {
+  const code = args?.code ?? args?.exploit_code;
+  const req = {
+    language: (args?.language === "bash" ? "bash" : "python") as "bash" | "python",
+    code: typeof code === "string" ? code : "",
+    timeout_ms: typeof args?.timeout_ms === "number" ? args.timeout_ms : undefined,
+  };
+  if (!req.code) {
+    step.output = `[sandboxExec] no code provided for ${tool}`;
+    return;
+  }
+  sandboxExec(req)
+    .then((r) => {
+      step.output = JSON.stringify(r, null, 2);
+    })
+    .catch((e: unknown) => {
+      step.output = `[sandboxExec error] ${String((e as Error)?.message ?? e)}`;
+    });
 }
 
 function mockOutput(tool: string, _args: Record<string, unknown>): string {

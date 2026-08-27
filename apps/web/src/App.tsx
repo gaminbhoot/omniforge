@@ -111,6 +111,7 @@ export default function App() {
   }
 
   const lastToolOutput = [...(session?.steps ?? [])].reverse().find((s) => s.output)?.output;
+  const replan = [...(session?.steps ?? [])].reverse().find((s) => s.suggest)?.suggest;
 
   return (
     <>
@@ -184,6 +185,15 @@ export default function App() {
             <div className="mt-4">
               <AgentTimeline steps={session?.steps ?? []} />
             </div>
+            {replan && (
+              <button
+                onClick={() => replan && fireTool(replan.tool, replan.args)}
+                disabled={busy}
+                className="mt-4 w-full rounded-xl border border-warn/40 bg-warn/10 px-4 py-2.5 text-sm font-semibold text-warn hover:bg-warn/20 disabled:opacity-40 transition"
+              >
+                ↻ Apply agent replan → {replan.tool}
+              </button>
+            )}
           </div>
         </>
       }
