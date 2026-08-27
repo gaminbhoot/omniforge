@@ -16,6 +16,15 @@ import textwrap
 import os
 
 
+def _decoded(value) -> str:
+    """TimeoutExpired output may be bytes (CPython) or str depending on version."""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    if isinstance(value, str):
+        return value
+    return ""
+
+
 def run_python(code: str, timeout: float) -> dict:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(textwrap.dedent(code))
@@ -29,7 +38,7 @@ def run_python(code: str, timeout: float) -> dict:
         )
         return {"exitCode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr, "timedOut": False}
     except subprocess.TimeoutExpired as e:
-        return {"exitCode": 124, "stdout": e.stdout.decode() if e.stdout else "", "stderr": "TimeoutExpired", "timedOut": True}
+        return {"exitCode": 124, "stdout": _decoded(e.stdout), "stderr": "TimeoutExpired", "timedOut": True}
     finally:
         try:
             os.unlink(fname)
@@ -47,7 +56,7 @@ def run_bash(code: str, timeout: float) -> dict:
         )
         return {"exitCode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr, "timedOut": False}
     except subprocess.TimeoutExpired as e:
-        return {"exitCode": 124, "stdout": e.stdout.decode() if e.stdout else "", "stderr": "TimeoutExpired", "timedOut": True}
+        return {"exitCode": 124, "stdout": _decoded(e.stdout), "stderr": "TimeoutExpired", "timedOut": True}
 
 
 def main():

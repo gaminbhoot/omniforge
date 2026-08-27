@@ -32,25 +32,38 @@ function dockerExec(req: SandboxExecRequest): Promise<SandboxExecResult> {
     });
     let out = "";
     let err = "";
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
     proc.stdout.on("data", (d) => (out += d));
     proc.stderr.on("data", (d) => (err += d));
-    proc.on("error", reject);
+    proc.on("error", (e) => done(() => reject(e)));
     proc.on("close", (code) => {
-      if (out) {
-        try {
-          resolve(JSON.parse(out));
-          return;
-        } catch {}
-      }
-      reject(new Error(`sandbox exec failed code=${code} err=${err} out=${out}`));
+      done(() => {
+        if (out) {
+          try {
+            resolve(JSON.parse(out));
+            return;
+          } catch {}
+        }
+        reject(new Error(`sandbox exec failed code=${code} err=${err} out=${out}`));
+      });
     });
-    proc.stdin.write(JSON.stringify(req));
-    proc.stdin.end();
-    setTimeout(() => {
+    try {
+      proc.stdin.write(JSON.stringify(req));
+      proc.stdin.end();
+    } catch {
+      // stdin may already be gone (timeout race) — close handler reports the failure
+    }
+    const timer = setTimeout(() => {
       try {
         proc.kill("SIGKILL");
       } catch {}
-      reject(new Error("sandbox exec timeout"));
+      done(() => reject(new Error("sandbox exec timeout")));
     }, (req.timeout_ms ?? 15000) + 2000);
   });
 }
@@ -61,15 +74,25 @@ function localExec(req: SandboxExecRequest): Promise<SandboxExecResult> {
     const proc = spawn(cmd[0], cmd.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.stderr.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => resolve({ exitCode: code ?? 0, stdout, stderr, timedOut: false }));
-    proc.on("error", (e) => resolve({ exitCode: 1, stdout: "", stderr: String(e), timedOut: false }));
-    setTimeout(() => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       try {
         proc.kill("SIGKILL");
       } catch {}
       resolve({ exitCode: 124, stdout, stderr: stderr + "\n[TIMEOUT]", timedOut: true });
     }, req.timeout_ms ?? 15000);
+    const finish = (result: SandboxExecResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    proc.stdout.on("data", (d) => (stdout += d));
+    proc.stderr.on("data", (d) => (stderr += d));
+    proc.on("close", (code) => finish({ exitCode: code ?? 0, stdout, stderr, timedOut: false }));
+    proc.on("error", (e) => finish({ exitCode: 1, stdout: "", stderr: String(e), timedOut: false }));
   });
 }
