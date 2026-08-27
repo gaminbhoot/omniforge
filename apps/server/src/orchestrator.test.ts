@@ -27,14 +27,44 @@ describe("HITL governance in orchestrator", () => {
     expect(last.tool).toBe("get_metrics");
   });
 
-  it("records rejection with feedback and halts the mission", () => {
+  it("on rejection, feeds feedback back and replans with a safer alternative", () => {
     const s = createSession("cve patch pr");
     proposeTool(s.id, "create_patch_pr", { branch: "fix/x", title: "t", patch: "-" });
     const resolved = resolveApproval(s.id, false, "not while prod is on fire");
-    expect(resolved.status).toBe("done");
+    // mission CONTINUES (replan), it does not halt
+    expect(resolved.status).toBe("running");
     expect(resolved.pendingApproval).toBeNull();
     const last = resolved.steps[resolved.steps.length - 1];
+    expect(last.role).toBe("agent");
     expect(last.text).toContain("not while prod is on fire");
+    expect(last.text).toContain("replanning");
+    expect(last.suggest?.tool).toBe("test_exploit");
+  });
+
+  it("rejected restart_service replans to a live diagnostic", () => {
+    const s = createSession("outage: restart api-gateway");
+    proposeTool(s.id, "restart_service", { service: "api-gateway" });
+    const resolved = resolveApproval(s.id, false, "too risky right now");
+    const last = resolved.steps[resolved.steps.length - 1];
+    expect(resolved.status).toBe("running");
+    expect(last.suggest?.tool).toBe("run_diagnostic_script");
+    // the replan suggestion is itself runnable without hitting the gate
+    const after = proposeTool(s.id, last.suggest!.tool, last.suggest!.args);
+    const step = after.steps[after.steps.length - 1];
+    expect(step.role).toBe("tool");
+    expect(step.text).toContain("sandbox");
+  });
+
+  it("routes sandbox tools through live sandboxExec, not mock output", () => {
+    const s = createSession("etl data");
+    const after = proposeTool(s.id, "run_etl_script", { language: "python", code: "print('live-etl-check')" });
+    const step = after.steps[after.steps.length - 1];
+    expect(step.text).toContain("live in sandbox");
+    // output fills asynchronously — give the event loop a beat
+    return new Promise<void>((resolve) => setTimeout(() => {
+      expect(step.output).toContain("live-etl-check");
+      resolve();
+    }, 3000));
   });
 
   it("generates unique step ids even for rapid successive calls", () => {
