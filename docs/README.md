@@ -8,6 +8,8 @@ Welcome to the **OmniForge** documentation suite for **The Agent Harness Hackath
 
 0. **[🛡️ Security Audit Report — SAE Deep Dive (`SECURITY_AUDIT_REPORT.md`)](./SECURITY_AUDIT_REPORT.md)**
    - Phase-2 (25 Aug) gate audit: 12 findings with root causes, evidence, fixes, and schedule-aligned remediation plan (P2→P4).
+0. **[🔍 Gap Analysis & Recommendations (`GAP_ANALYSIS_AND_RECOMMENDATIONS.md`)](./GAP_ANALYSIS_AND_RECOMMENDATIONS.md)**
+   - Phase-3 (27 Aug) full-project review: verified-working vs. claimed, 5 ranked gaps (harness integration DQ risk, Q Branch PR evidence, HITL DoD, audit hardening, mock demo output), and a prioritized R1–R8 action plan to the Aug 30 deadline.
 
 1. **[🏆 Hackathon Guide & Tracks (`HACKATHON_GUIDE.md`)](./HACKATHON_GUIDE.md)**
    - Official event details, links, dates, and judging track strategies — **updated Aug 25 to kick-off guide** (Grand Prize DGX Spark, Q Branch Mac Mini, Universal Exports interviews, Field Report Keychron, Calling Card Logitech MX Master 3, Radio Traffic swag) + 7-step TrueForge / 5-step Qodo setup.
