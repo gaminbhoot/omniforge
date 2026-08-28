@@ -5,7 +5,8 @@
  */
 
 import { classifyIntent, subagentFor } from "./policies/router.js";
-import { evaluate, createApprovalRequest, type ApprovalRequest } from "./policies/hitl.js";
+import { evaluate, createApprovalRequest, hashArgs, isExpired, APPROVAL_TTL_MS, type ApprovalRequest } from "./policies/hitl.js";
+import { audit } from "./audit.js";
 import { sandboxExec } from "@omniforge/mcp-tools/shared/sandboxExec";
 
 export type Step = {
@@ -31,6 +32,27 @@ export type Session = {
 };
 
 const sessions = new Map<string, Session>();
+
+/** Auto-reject expired HITL gates (US-11: 5 minutes). Called on every read/write. */
+function sweepExpiredApproval(session: Session): void {
+  const req = session.pendingApproval;
+  if (!req) return;
+  if (!isExpired(req)) return;
+  // timeout → auto-reject (SA-10)
+  req.status = "rejected";
+  session.pendingApproval = null;
+  session.status = "running";
+  const msg = `⏰ Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m (timeout)`;
+  session.steps.push({
+    id: stepId(),
+    role: "agent",
+    text: `${msg} for **${req.tool}**. Agent ${GENERIC_REPLAN}.`,
+    tool: req.tool,
+    args: req.args,
+    timestamp: new Date().toISOString(),
+  });
+  audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "timeout", actor: "system:timeout", reason: "approval window expired" });
+}
 
 /** Collision-proof step id (Date.now() alone collides on rapid calls) */
 function stepId(): string {
@@ -62,7 +84,9 @@ export function createSession(userInput: string): Session {
 }
 
 export function getSession(id: string): Session | undefined {
-  return sessions.get(id);
+  const session = sessions.get(id);
+  if (session) sweepExpiredApproval(session);
+  return session;
 }
 
 export function listSessions(): Session[] {
@@ -76,6 +100,7 @@ export function listSessions(): Session[] {
 export function proposeTool(sessionId: string, tool: string, args: Record<string, unknown>): Session {
   const session = sessions.get(sessionId);
   if (!session) throw new Error(`session not found: ${sessionId}`);
+  sweepExpiredApproval(session);
   if (session.status === "awaiting_approval") {
     // Mission is paused at a HITL gate — no side effects (even LOW/MEDIUM)
     // and no overwriting of the pending ApprovalRequest until it is resolved.
@@ -97,6 +122,7 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
       risk: rule.risk,
       timestamp: new Date().toISOString(),
     });
+    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: approval.id, tool, risk: rule.risk, decision: "pending", actor: "agent" });
   } else {
     const live = SANDBOX_TOOLS.has(tool);
     const step: Step = {
@@ -150,6 +176,21 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
   const session = sessions.get(sessionId);
   if (!session || !session.pendingApproval) throw new Error("no pending approval");
   const req = session.pendingApproval;
+  // If the window expired, treat as timeout (SA-10) — even an "approve" becomes auto-reject
+  if (isExpired(req)) {
+    session.pendingApproval = null;
+    session.status = "running";
+    session.steps.push({
+      id: stepId(),
+      role: "agent",
+      text: `⏰ Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m for **${req.tool}**.`,
+      tool: req.tool,
+      args: req.args,
+      timestamp: new Date().toISOString(),
+    });
+    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "timeout", actor: "system:timeout", reason: "approval window expired on resolve" });
+    return session;
+  }
   req.status = approved ? "approved" : "rejected";
   session.pendingApproval = null;
   if (approved) {
@@ -169,6 +210,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
       text: `Mission step completed. Awaiting next instruction or auto-advancing.`,
       timestamp: new Date().toISOString(),
     });
+    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "approved", actor: "operator:api", reason: feedback });
   } else {
     // Rejected — the feedback becomes the agent's next observation and the
     // mission CONTINUES with a safer replan (not a halt).
@@ -183,6 +225,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
       suggest: replan.suggest,
       timestamp: new Date().toISOString(),
     });
+    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "rejected", actor: "operator:api", reason: feedback });
   }
   return session;
 }

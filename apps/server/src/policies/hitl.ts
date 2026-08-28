@@ -7,6 +7,8 @@
  *   broadcasts it over WebSocket. Client renders ApprovalModal.
  */
 
+import { createHash } from "node:crypto";
+
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type PolicyRule = {
@@ -24,8 +26,33 @@ export type ApprovalRequest = {
   executionMode: string;
   reason: string;
   createdAt: string;
+  /** ISO deadline — auto-reject after APPROVAL_TTL_MS (SA-10 / US-11: timeout → auto-reject) */
+  expiresAt: string;
+  /** hash of args at proposal time — parameters changing later voids the approval (re-approval required) */
+  argsHash: string;
   status: "pending" | "approved" | "rejected";
 };
+
+/** Approval window (US-11: 5 minutes). Override for tests/demo via APPROVAL_TTL_MS env (ms). */
+export const APPROVAL_TTL_MS = Number(process.env.APPROVAL_TTL_MS ?? 5 * 60 * 1000);
+
+/** Deterministic, key-order-independent hash for tamper evidence. */
+export function hashArgs(args: Record<string, unknown>): string {
+  return createHash("sha256").update(stableStringify(args)).digest("hex").slice(0, 16);
+}
+
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+export function isExpired(req: Pick<ApprovalRequest, "expiresAt">): boolean {
+  return Date.now() >= Date.parse(req.expiresAt);
+}
 
 const POLICIES: Record<string, PolicyRule> = {
   // System MCP
@@ -71,6 +98,8 @@ export function createApprovalRequest(tool: string, args: Record<string, unknown
     executionMode: rule.executionMode,
     reason: rule.description,
     createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + APPROVAL_TTL_MS).toISOString(),
+    argsHash: hashArgs(args),
     status: "pending",
   };
 }

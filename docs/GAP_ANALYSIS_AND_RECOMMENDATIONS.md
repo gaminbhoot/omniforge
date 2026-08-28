@@ -85,6 +85,9 @@ Reference: the official [example agents cookbook](https://github.com/truefoundry
 
 **R3. Make the demo terminal real (GAP-5).** ✅ Done 27/28 Aug — sandbox tools route through `sandboxExec`; real stdout streams to `TerminalStream`.
 **R4. Finish Phase 3 DoD (GAP-3):** ~~reject→feedback→replan~~ ✅ done; remaining: 5-min timeout auto-reject, `session_cache/audit.jsonl`, re-approval on param change.
+
+### P1 — Aug 28
+
 **R5. Record the HITL modal GIF as backup** (risk R4 in the risk register) — one flake on camera = reshoot at deadline.
 **R6. P3/P4 audit batch (GAP-4):** SA-01 (chmod + rotate), SA-02, SA-04, SA-05, SA-08, SA-09.
 
