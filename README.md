@@ -213,6 +213,7 @@ Qodo PR-Agent reviews every pull request with full repository context, configure
 | Pull request | Qodo review | Finding | Resolution |
 |--------------|-------------|---------|------------|
 | [#1 — verify Qodo automated PR review integration](https://github.com/gaminbhoot/omniforge/pull/1) | [PR Summary](https://github.com/gaminbhoot/omniforge/pull/1) and [Code Review](https://github.com/gaminbhoot/omniforge/pull/1) by `qodo-code-review` | Medium (correctness): `checkSystemHealth()` hardcoded `healthy: true`, masking real outages | Fixed: health now derived from injected dependency checks, with regression tests |
+| [#2 — security hardening and repository formalization](https://github.com/gaminbhoot/omniforge/pull/2) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/2) by `qodo-code-review` | — | Helmet and rate limiting (SA-05), read-only sandbox with PID cap (SA-02), escaped HTML rendering (SA-09), healthcheck fix |
 
 ## Security Practices
 
