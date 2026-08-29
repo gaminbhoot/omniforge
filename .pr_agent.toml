@@ -1,4 +1,4 @@
-# Qodo PR-Agent Configuration — OmniForge (Q Branch Track)
+# Qodo PR-Agent Configuration — OmniForge
 # Docs: https://qodo-merge-docs.qodo.ai/configuration/options/
 
 [config]
@@ -8,10 +8,10 @@ verbosity_level = 2
 
 [pr_reviewer]
 extra_instructions = """
-Review this PR for the OmniForge Mission Control platform (TrueForge hackathon, TF-007).
+Review this PR for the OmniForge mission-control platform.
 Focus on:
-- HITL policy correctness (never auto-execute CRITICAL actions without approval token)
-- Sandbox isolation (no host FS escape, no secret leakage)
+- HITL policy correctness (never auto-execute CRITICAL actions without an approval token)
+- Sandbox isolation (no host filesystem escape, no secret leakage)
 - MCP tool contract adherence (typed inputs/outputs, error handling)
 - TypeScript strictness and modularity
 """
@@ -27,7 +27,7 @@ generate_ai_title = true
 
 [pr_code_suggestions]
 num_code_suggestions = 3
-extra_instructions = "Suggest improvements that help win Double-O (TrueForge depth) and Savile Row (UI polish)."
+extra_instructions = "Suggest improvements that strengthen HITL correctness, sandbox isolation, and code quality."
 
 [pr_questions]
 extra_instructions = "Be concise and actionable. Link to file:line where relevant."

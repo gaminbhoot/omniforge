@@ -14,7 +14,7 @@ export function ApprovalModal({ open, request, onApprove, onReject, onClose }: P
       <div className="relative w-full max-w-xl rounded-2xl border border-white/15 bg-panel shadow-2xl overflow-hidden">
         <div className="px-6 pt-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-danger/30 bg-danger/15 px-3 py-1 text-xs font-bold tracking-wide text-red-200">
-            ⛔ HUMAN-IN-THE-LOOP — {request.risk}
+            HUMAN-IN-THE-LOOP — {request.risk}
           </div>
           <h2 className="mt-3 text-lg font-bold">Approval required</h2>
           <p className="mt-1 text-sm text-muted">{request.reason}</p>

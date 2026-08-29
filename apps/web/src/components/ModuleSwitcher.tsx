@@ -1,9 +1,9 @@
 type Props = { active: string; onChange: (m: string) => void };
 
 const MODULES = [
-  { id: "ops", label: "OpsForge", icon: "🛠️", desc: "SRE & Incidents" },
-  { id: "security", label: "SecurForge", icon: "🛡️", desc: "CVE & Patch" },
-  { id: "data", label: "DataForge", icon: "📊", desc: "ETL & Schema" },
+  { id: "ops", label: "OpsForge", icon: "OP", desc: "SRE & Incidents" },
+  { id: "security", label: "SecurForge", icon: "SEC", desc: "CVE & Patch" },
+  { id: "data", label: "DataForge", icon: "DATA", desc: "ETL & Schema" },
 ];
 
 export function ModuleSwitcher({ active, onChange }: Props) {
@@ -19,7 +19,7 @@ export function ModuleSwitcher({ active, onChange }: Props) {
               : "bg-white/[0.06] text-zinc-300 border-white/10 hover:bg-white/[0.10] hover:text-white"
           }`}
         >
-          <span className="text-base">{m.icon}</span>
+          <span className="font-mono text-[10px] tracking-widest opacity-70">{m.icon}</span>
           <span>{m.label}</span>
           <span className={`hidden sm:inline text-xs font-normal ${active === m.id ? "text-ink/60" : "text-muted"}`}>{m.desc}</span>
         </button>

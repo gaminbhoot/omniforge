@@ -1,30 +1,31 @@
-# @omniforge/server — TrueForge Orchestrator (Phase 0 Scaffold)
+# @omniforge/server
 
-Phase 0 stub that mirrors the real TrueForge harness API so the cockpit is runnable before Aug 24.
+Express orchestrator: mission sessions, HITL policy engine, SSE streaming, and the TrueForge harness bridge.
 
 ## Run
 
 ```bash
-npm run dev:server   # from root, or
+npm run dev:server                # from the repository root
+# or
 npm --workspace apps/server run dev
 ```
 
-Env: `PORT` (default 3001), `CORS_ORIGIN` (default http://localhost:5173)
+Environment: `PORT` (default 3001), `CORS_ORIGIN` (default http://localhost:5173). See `.env.example` for the full list.
 
-## Routes
+## API
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | healthcheck |
-| POST | `/api/missions` | `{prompt}` → create mission, auto-classifies to OpsForge/SecurForge/DataForge |
-| GET | `/api/missions` | list sessions |
-| GET | `/api/missions/:id` | get session + steps |
-| POST | `/api/missions/:id/tools` | `{tool, args}` → auto-exec if LOW/MEDIUM, else returns `pendingApproval` (HITL) |
-| POST | `/api/missions/:id/approval` | `{approved: bool, feedback?}` → resume |
-| GET | `/api/stream/:id` | SSE stream (polls every 1.5s) |
+| GET | `/api/health` | Health check |
+| POST | `/api/missions` | `{prompt}` — create a mission; auto-classifies to OpsForge / SecurForge / DataForge |
+| GET | `/api/missions` | List sessions |
+| GET | `/api/missions/:id` | Get session and steps |
+| POST | `/api/missions/:id/tools` | `{tool, args}` — executes automatically at LOW/MEDIUM risk; HIGH/CRITICAL returns `pendingApproval` |
+| POST | `/api/missions/:id/approval` | `{approved, feedback?}` — resolve a pending HITL gate |
+| GET | `/api/stream/:id` | SSE stream of session steps |
+| GET | `/api/harness/health` | TrueForge harness availability probe |
+| GET | `/api/verify/latest` | Latest spec-verifier verdict |
 
-## HITL
+## HITL policy engine
 
-See `src/policies/hitl.ts` — CRITICAL tools (`restart_service`, `execute_write`) require approval. The web UI renders `ApprovalModal` when `pendingApproval` is non-null.
-
-> On Aug 24, swap `src/orchestrator.ts` internals to call real `@truefoundry/trueforge` SDK. Keep the route contract stable so `apps/web` needs zero changes.
+Tool risk tiers and approval rules live in `src/policies/hitl.ts`. HIGH/CRITICAL tools pause the session; approvals expire after `APPROVAL_TTL_MS`; every decision is appended to `session_cache/audit.jsonl`.

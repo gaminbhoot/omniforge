@@ -14,7 +14,8 @@ JSON
 
 ## Security
 
-- `no-new-privileges`, `cap_drop: ALL`, `read_only: false` (workspace is rw)
+- `no-new-privileges`, `cap_drop: ALL`, `read_only: true`, `pids_limit: 128`
+- `tmpfs` mounts for `/tmp` and `/home/agent` (scratch space only)
 - Runs as non-root `agent` (uid 1000)
 - `mem_limit: 512m`, `cpus: 1`
-- No host FS access except `/workspace` bind mount
+- No host filesystem access except the `/workspace` bind mount

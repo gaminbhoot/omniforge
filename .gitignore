@@ -1,5 +1,5 @@
 # ==========================================
-# 🌿 OmniForge Git Ignore Configuration
+# OmniForge Git Ignore Configuration
 # ==========================================
 
 # --- Environment & Credentials ---
@@ -98,7 +98,12 @@ Thumbs.db
 
 # --- Temporary & Local Tool Directories ---
 .claude/
+.fallow/
+.husky/_/
 tmp/
+
+# --- Internal Planning Documents (kept locally, not published) ---
+docs/
 
 # --- TypeScript Build Cache ---
 *.tsbuildinfo

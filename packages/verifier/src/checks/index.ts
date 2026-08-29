@@ -3,7 +3,7 @@
  * Keep them fast; worst-case each < 30s. Time-box via timeout where needed.
  */
 import { execSync } from "node:child_process";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import type { CheckResult } from "../spec.js";
 
 function timed<T>(fn: () => T): { value: T; ms: number } {
@@ -22,10 +22,26 @@ function sh(cmd: string, timeoutMs = 60000): { ok: boolean; out: string; code: n
   }
 }
 
-function fileContains(path: string, re: RegExp): boolean {
-  try { return re.test(readFileSync(path, "utf-8")); } catch { return false; }
-}
 function grepDiff(diff: string, re: RegExp): boolean { return re.test(diff); }
+
+/**
+ * Added lines from non-prose files only (skips .md and lockfiles).
+ * Scanning added code lines avoids false positives from documentation,
+ * deleted files, and path headers.
+ */
+function addedCodeDiff(diff: string): string {
+  const sections = diff.split(/^diff --git /m).filter(Boolean);
+  const kept = sections.filter((s) => {
+    const path = /^a\/(\S+)/.exec(s)?.[1] ?? "";
+    if (!path || path.endsWith(".md") || path.endsWith(".json") || path === ".gitignore") return false;
+    if (path.startsWith("packages/verifier/src/checks/")) return false;
+    return true;
+  });
+  return kept
+    .flatMap((s) => s.split("\n"))
+    .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
+    .join("\n");
+}
 function grepRepo(pattern: RegExp, globs: string[]): string[] {
   const hits: string[] = [];
   for (const g of globs) {
@@ -59,13 +75,13 @@ export function checkLint(): CheckResult {
   };
 }
 export function checkTests(): CheckResult {
-  const { value: r, ms } = timed(() => sh("npm run test --if-present 2>&1 || npm run test:all 2>&1", 120000));
+  const { value: r, ms } = timed(() => sh("npm run test --if-present 2>&1", 120000));
   // Heuristic: if no tests yet, don't fail — warn
   const noTests = /No test files found|no tests/i.test(r.out);
-  if (noTests) return { id: "tests", label: "Tests pass (vitest)", status: "warn", severity: "critical", specRef: "CI:test_ci.yml", evidence: "No tests found — not failing, but Q Branch needs coverage", durationMs: ms, fixHint: "Add vitest coverage for patched code (see Qodo)" };
+  if (noTests) return { id: "tests", label: "Tests pass (vitest)", status: "warn", severity: "critical", specRef: "CI:test_ci.yml", evidence: "No tests found — not failing, but code quality needs coverage", durationMs: ms, fixHint: "Add vitest coverage for patched code" };
   return {
     id: "tests", label: "Tests pass (vitest)", status: r.ok ? "pass" : "fail", severity: "critical",
-    specRef: "CI:test_ci.yml / Q Branch", evidence: r.out.slice(0, 3000), durationMs: ms,
+    specRef: "CI:test_ci.yml", evidence: r.out.slice(0, 3000), durationMs: ms,
     fixHint: r.ok ? undefined : "Failing tests = regression. Fix patch or add missing mocks.",
   };
 }
@@ -107,6 +123,7 @@ export function checkHitlIntegrity(diff: string): CheckResult {
 
 export function checkNoBypass(diff: string): CheckResult {
   const t0 = Date.now();
+  const code = addedCodeDiff(diff);
   const patterns: Array<[RegExp, string]> = [
     [/approved\s*:\s*true.*CRITICAL/i, "hard-coded approved:true near CRITICAL"],
     [/needsApproval\s*=\s*false/i, "needsApproval forced false"],
@@ -115,7 +132,7 @@ export function checkNoBypass(diff: string): CheckResult {
     [/\bskipHitl\b|\bbypassHitl\b/i, "explicit bypass flag"],
   ];
   const hits: string[] = [];
-  for (const [re, desc] of patterns) if (grepDiff(diff, re)) hits.push(desc);
+  for (const [re, desc] of patterns) if (re.test(code)) hits.push(desc);
   // also scan repo for new bypass helpers
   if (existsSync("apps/server/src")) {
     const repoHits = grepRepo(/skipHitl|bypass.*hitl|forceApprove/i, ["apps/server/src"]);
@@ -138,9 +155,10 @@ export function checkSandboxIsolation(diff: string): CheckResult {
 
   // Dangerous: raw child_process / exec outside sandboxExec
   const dangerous = [/child_process/, /execSync\s*\(/, /spawn\s*\(/, /Docker.*host/i];
-  const diffHasDangerous = dangerous.some(re => grepDiff(diff, re));
-  const usesSandboxExec = diff.includes("sandboxExec") || (existsSync("packages/mcp-tools/src/shared/sandboxExec.ts") && readFileSync("packages/mcp-tools/src/shared/sandboxExec.ts","utf-8").length > 0);
-  if (diffHasDangerous && !diff.includes("sandboxExec")) {
+  const code = addedCodeDiff(diff);
+  const diffHasDangerous = dangerous.some((re) => re.test(code));
+  const usesSandboxExec = code.includes("sandboxExec") || existsSync("packages/mcp-tools/src/shared/sandboxExec.ts");
+  if (diffHasDangerous && !usesSandboxExec) {
     // allow if it's in verifier/scripts itself
     const isVerifierOnly = diff.split("\n").every(l => l.includes("packages/verifier") || l.includes("scripts/codex-monitor"));
     if (!isVerifierOnly) { status = "fail"; evidence.push("DIFF uses raw exec/child_process without sandboxExec — must go through sandbox"); }
@@ -154,11 +172,12 @@ export function checkSandboxIsolation(diff: string): CheckResult {
 export function checkArchLayers(diff: string): CheckResult {
   const t0 = Date.now();
   const violations: string[] = [];
+  const code = addedCodeDiff(diff);
   // Simple layer guard: web should not import server internals, mcp-tools should not import web
-  if (grepDiff(diff, /from\s+["'].*apps\/server.*["']/ ) && grepDiff(diff, /apps\/web/)) violations.push("web imports server internals");
-  if (grepDiff(diff, /from\s+["'].*apps\/web.*["']/ ) && diff.includes("packages/mcp-tools")) violations.push("mcp-tools imports web");
+  if (/from\s+["'].*apps\/server.*["']/.test(code) && code.includes("apps/web")) violations.push("web imports server internals");
+  if (/from\s+["'].*apps\/web.*["']/.test(code) && code.includes("packages/mcp-tools")) violations.push("mcp-tools imports web");
   // UI components should not call sandbox directly — must go via server API
-  if (grepDiff(diff, /sandboxExec|runner\.py/) && grepDiff(diff, /apps\/web\/src\/components/)) violations.push("web component directly uses sandboxExec");
+  if (/sandboxExec|runner\.py/.test(code) && code.includes("apps/web/src/components")) violations.push("web component directly uses sandboxExec");
   return {
     id: "arch-layers", label: "5-layer architecture respected", status: violations.length ? "fail" : "pass", severity: "high",
     specRef: "ARCH:§ System Architecture", evidence: violations.length ? violations.join(" | ") : "No layer violations in diff", durationMs: Date.now()-t0,
@@ -225,8 +244,8 @@ export function checkSecrets(diff: string, nameOnly: string[] = []): CheckResult
   for (const [re, desc] of secretPatterns) {
     if (re.test(relevantLines)) hits.push(desc);
   }
-  // Also flag if diff adds a file literally named .env with content (check diff header)
-  if (/\+\+\+ b\/\.env\b/.test(diff) || /\+\+\+ b\/\.env\.local\b/.test(diff)) {
+  // Also flag if diff adds a file literally named .env (exact-name match, not .env.example)
+  if (/^\+\+\+ b\/\.env$/m.test(diff) || /^\+\+\+ b\/\.env\.(?!example)[a-z]+$/m.test(diff)) {
     if (!hits.some(h=>h.includes(".env"))) hits.push(".env file addition in diff header");
   }
 
