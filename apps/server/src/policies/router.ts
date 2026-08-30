@@ -30,8 +30,8 @@ export function subagentFor(mission: Mission): string {
 }
 
 /**
- * Classify into EVERY matching domain (not just the first hit) — used for
- * parallel subagent fan-out: a combined prompt spawns one session per domain.
+ * Classify into EVERY matching domain (not just the first hit) — utility for
+ * callers that need the full set of domains a prompt touches.
  */
 export function classifyAll(input: string): Mission[] {
   const matched: Mission[] = [];

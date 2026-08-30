@@ -4,7 +4,7 @@
  * when the harness drops; keep the public interface stable.
  */
 
-import { classifyIntent, subagentFor, classifyAll } from "./policies/router.js";
+import { classifyIntent, subagentFor } from "./policies/router.js";
 import { evaluate, createApprovalRequest, isExpired, APPROVAL_TTL_MS, type ApprovalRequest } from "./policies/hitl.js";
 import { audit } from "./audit.js";
 import { sandboxExec } from "@omniforge/mcp-tools/shared/sandboxExec";
@@ -42,6 +42,82 @@ const sessions = new Map<string, Session>();
 /** Bound the in-memory session store (SA-12) — evict oldest beyond the cap. */
 const MAX_SESSIONS = 200;
 
+/** Collision-proof step id (Date.now() alone collides on rapid calls) */
+function stepId(): string {
+  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/**
+ * Replan playbook — what the agent does instead when a gated action is
+ * rejected. The human's feedback becomes the next observation; the agent
+ * proposes a safer alternative (one-click in the Cockpit UI).
+ */
+const REPLANS: Record<string, { text: string; suggest?: { tool: string; args: Record<string, unknown> } }> = {
+  restart_service: {
+    text: "replanning: running a deeper live diagnostic first — will re-propose a narrower restart only if the evidence supports it",
+    suggest: {
+      tool: "run_diagnostic_script",
+      args: { language: "python", code: "print('replan: deep health probe after rejected restart')\nprint('p99 latency, error rate, dependency status — collecting…')" },
+    },
+  },
+  create_patch_pr: {
+    text: "replanning: refining the patch with regression tests before requesting human review again",
+    suggest: {
+      tool: "test_exploit",
+      args: { cve: "re-verify after patch refinement", language: "python", exploit_code: "print('replan: regression check on patched code path')" },
+    },
+  },
+  execute_write: {
+    text: "replanning: previewing the affected rows with a read-only query so nothing touches the target until reviewed",
+    suggest: {
+      tool: "query_readonly",
+      args: { sql: "SELECT * FROM staging.orders LIMIT 10", connection: "postgres" },
+    },
+  },
+};
+
+const GENERIC_REPLAN = "replanning: incorporating your feedback and preparing a safer alternative for review";
+
+/** MEDIUM tools that genuinely execute code — run for real via sandboxExec (Docker, dev fallback local) */
+const SANDBOX_TOOLS = new Set(["run_diagnostic_script", "test_exploit", "run_etl_script"]);
+
+function mockOutput(tool: string, _args: Record<string, unknown>): string {
+  const mocks: Record<string, string> = {
+    read_logs: "2026-08-23T00:01:00Z WARN  latency p99=420ms\n2026-08-23T00:02:00Z INFO  recovered",
+    get_metrics: JSON.stringify({ cpu: "42%", memory: "512MiB", p99: "210ms" }, null, 2),
+    run_diagnostic_script: '{"exitCode":0,"stdout":"diagnostics passed","stderr":""}',
+    restart_service: "service restarted successfully — healthcheck OK",
+    scan_dependencies: JSON.stringify([{ pkg: "lodash", cve: "CVE-2021-23337", severity: "high" }], null, 2),
+    test_exploit: '{"exploitResult":{"exitCode":0,"stdout":"exploit reproduced in sandbox"}}',
+    list_tables: '["users","orders","events"]',
+    query_readonly: "| id | name  |\n| 1  | alice |\n| 2  | bob   |",
+    run_etl_script: '{"exitCode":0,"stdout":"transformed 1200 rows"}',
+    execute_write: "write executed (simulated — target system untouched)",
+    validate_schema: JSON.stringify({ table: "orders", columnsExpected: 6, columnsFound: 6, drift: "none", status: "valid" }, null, 2),
+  };
+  return mocks[tool] ?? `[mock output for ${tool}]`;
+}
+
+function execInSandbox(tool: string, args: Record<string, unknown>, step: Step): void {
+  const code = args?.code ?? args?.exploit_code;
+  const req = {
+    language: (args?.language === "bash" ? "bash" : "python") as "bash" | "python",
+    code: typeof code === "string" ? code : "",
+    timeout_ms: typeof args?.timeout_ms === "number" ? args.timeout_ms : undefined,
+  };
+  if (!req.code) {
+    step.output = `[sandboxExec] no code provided for ${tool}`;
+    return;
+  }
+  sandboxExec(req)
+    .then((r) => {
+      step.output = JSON.stringify(r, null, 2);
+    })
+    .catch((e: unknown) => {
+      step.output = `[sandboxExec error] ${String((e as Error)?.message ?? e)}`;
+    });
+}
+
 /** Auto-reject expired HITL gates (US-11: 5 minutes). Called on every read/write. */
 function sweepExpiredApproval(session: Session): void {
   const req = session.pendingApproval;
@@ -61,11 +137,6 @@ function sweepExpiredApproval(session: Session): void {
     timestamp: new Date().toISOString(),
   });
   audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "timeout", actor: "system:timeout", reason: "approval window expired" });
-}
-
-/** Collision-proof step id (Date.now() alone collides on rapid calls) */
-function stepId(): string {
-  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 /**
@@ -225,12 +296,17 @@ export function resumeSession(sessionId: string, prompt: string): Session {
  */
 export function fanoutSquad(prompt: string): { squadId: string; sessions: Session[] } {
   const squadId = `squad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const members = classifyAll(prompt).map((mission) => {
+  const domains: Array<{ type: "ops" | "security" | "data"; name: string; reason: string }> = [
+    { type: "ops", name: "OpsForge", reason: "SRE infrastructure & latency analysis" },
+    { type: "security", name: "SecurForge", reason: "AppSec vulnerability & dependency scan" },
+    { type: "data", name: "DataForge", reason: "DataOps pipeline & database integrity check" },
+  ];
+  const members = domains.map((d) => {
     const s = createSession(prompt);
-    s.mission = mission;
-    s.subagent = subagentFor(mission);
+    s.mission = { type: d.type, confidence: 0.9, reason: d.reason };
+    s.subagent = d.name;
     s.squadId = squadId;
-    s.steps[1].text = `Squad **${squadId}** → **${s.subagent}** (${mission.reason}). Running in parallel with the squad.`;
+    s.steps[1].text = `Squad **${squadId}** → **${s.subagent}** (${d.reason}). Running in parallel with the squad.`;
     return s;
   });
   return { squadId, sessions: members };
@@ -281,7 +357,7 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
     const step: Step = {
       id: stepId(),
       role: "tool",
-      text: `▶ ${tool} (${rule.risk}) — ${live ? "executing live in sandbox" : `auto-executed in ${rule.executionMode}`}`,
+      text: `${tool} (${rule.risk}) — ${live ? "executing live in sandbox" : `auto-executed in ${rule.executionMode}`}`,
       tool,
       args,
       output: live ? undefined : mockOutput(tool, args),
@@ -294,36 +370,6 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
   return session;
 }
 
-/**
- * Replan playbook — what the agent does instead when a gated action is
- * rejected. The human's feedback becomes the next observation; the agent
- * proposes a safer alternative (one-click in the Cockpit UI).
- */
-const REPLANS: Record<string, { text: string; suggest?: { tool: string; args: Record<string, unknown> } }> = {
-  restart_service: {
-    text: "replanning: running a deeper live diagnostic first — will re-propose a narrower restart only if the evidence supports it",
-    suggest: {
-      tool: "run_diagnostic_script",
-      args: { language: "python", code: "print('replan: deep health probe after rejected restart')\nprint('p99 latency, error rate, dependency status — collecting…')" },
-    },
-  },
-  create_patch_pr: {
-    text: "replanning: refining the patch with regression tests before requesting human review again",
-    suggest: {
-      tool: "test_exploit",
-      args: { cve: "re-verify after patch refinement", language: "python", exploit_code: "print('replan: regression check on patched code path')" },
-    },
-  },
-  execute_write: {
-    text: "replanning: previewing the affected rows with a read-only query so nothing touches the target until reviewed",
-    suggest: {
-      tool: "query_readonly",
-      args: { sql: "SELECT * FROM staging.orders LIMIT 10", connection: "postgres" },
-    },
-  },
-};
-
-const GENERIC_REPLAN = "replanning: incorporating your feedback and preparing a safer alternative for review";
 
 export function resolveApproval(sessionId: string, approved: boolean, feedback?: string): Session {
   const session = sessions.get(sessionId);
@@ -381,44 +427,4 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
     audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: req.id, tool: req.tool, risk: req.risk, decision: "rejected", actor: "operator:api", reason: feedback });
   }
   return session;
-}
-
-/** MEDIUM tools that genuinely execute code — run for real via sandboxExec (Docker, dev fallback local) */
-const SANDBOX_TOOLS = new Set(["run_diagnostic_script", "test_exploit", "run_etl_script"]);
-
-function execInSandbox(tool: string, args: Record<string, unknown>, step: Step): void {
-  const code = args?.code ?? args?.exploit_code;
-  const req = {
-    language: (args?.language === "bash" ? "bash" : "python") as "bash" | "python",
-    code: typeof code === "string" ? code : "",
-    timeout_ms: typeof args?.timeout_ms === "number" ? args.timeout_ms : undefined,
-  };
-  if (!req.code) {
-    step.output = `[sandboxExec] no code provided for ${tool}`;
-    return;
-  }
-  sandboxExec(req)
-    .then((r) => {
-      step.output = JSON.stringify(r, null, 2);
-    })
-    .catch((e: unknown) => {
-      step.output = `[sandboxExec error] ${String((e as Error)?.message ?? e)}`;
-    });
-}
-
-function mockOutput(tool: string, _args: Record<string, unknown>): string {
-  const mocks: Record<string, string> = {
-    read_logs: "2026-08-23T00:01:00Z WARN  latency p99=420ms\n2026-08-23T00:02:00Z INFO  recovered",
-    get_metrics: JSON.stringify({ cpu: "42%", memory: "512MiB", p99: "210ms" }, null, 2),
-    run_diagnostic_script: '{"exitCode":0,"stdout":"diagnostics passed","stderr":""}',
-    restart_service: "service restarted successfully — healthcheck OK",
-    scan_dependencies: JSON.stringify([{ pkg: "lodash", cve: "CVE-2021-23337", severity: "high" }], null, 2),
-    test_exploit: '{"exploitResult":{"exitCode":0,"stdout":"exploit reproduced in sandbox"}}',
-    list_tables: '["users","orders","events"]',
-    query_readonly: "| id | name  |\n| 1  | alice |\n| 2  | bob   |",
-    run_etl_script: '{"exitCode":0,"stdout":"transformed 1200 rows"}',
-    execute_write: "write executed (simulated — target system untouched)",
-    validate_schema: JSON.stringify({ table: "orders", columnsExpected: 6, columnsFound: 6, drift: "none", status: "valid" }, null, 2),
-  };
-  return mocks[tool] ?? `[mock output for ${tool}]`;
 }

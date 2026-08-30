@@ -167,11 +167,11 @@ describe("persistent sessions (follow-up on the same mission)", () => {
 });
 
 describe("parallel subagent squad fan-out", () => {
-  it("spawns one session per matched domain sharing a squadId", () => {
+  it("spawns one session per specialist domain sharing a squadId", () => {
     const { squadId, sessions } = fanoutSquad("outage on api-gateway and a CVE in lodash — handle both");
     expect(squadId).toMatch(/^squad_/);
-    expect(sessions.length).toBe(2);
-    expect(new Set(sessions.map((s) => s.subagent))).toEqual(new Set(["OpsForge", "SecurForge"]));
+    expect(sessions.length).toBe(3);
+    expect(new Set(sessions.map((s) => s.subagent))).toEqual(new Set(["OpsForge", "SecurForge", "DataForge"]));
     for (const s of sessions) {
       expect(s.squadId).toBe(squadId);
       expect(s.status).toBe("running");
@@ -179,16 +179,10 @@ describe("parallel subagent squad fan-out", () => {
     }
   });
 
-  it("falls back to a single general member when no domain matches", () => {
-    const { sessions } = fanoutSquad("do the thing");
-    expect(sessions.length).toBe(1);
-    expect(sessions[0].subagent).toBe("General");
-  });
-
   it("members are independent sessions (own ids, own steps)", () => {
-    const { sessions } = fanoutSquad("outage and etl schema drift");
-    expect(sessions.length).toBe(2);
-    expect(new Set(sessions.map((s) => s.id)).size).toBe(2);
+    const { sessions } = fanoutSquad("full sweep: outage, cve, and etl schema drift");
+    expect(sessions.length).toBe(3);
+    expect(new Set(sessions.map((s) => s.id)).size).toBe(3);
     proposeTool(sessions[0].id, "read_logs", {});
     expect(getSession(sessions[0].id)!.steps.length).toBeGreaterThan(getSession(sessions[1].id)!.steps.length);
   });

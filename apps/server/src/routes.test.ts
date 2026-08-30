@@ -130,7 +130,7 @@ describe("mission lifecycle over HTTP", () => {
     const res = await request(app).post("/api/missions/squad").send({ prompt: "outage on api-gateway and a CVE in lodash" });
     expect(res.status).toBe(201);
     expect(res.body.squadId).toMatch(/^squad_/);
-    expect(res.body.sessions.length).toBe(2);
+    expect(res.body.sessions.length).toBe(3);
     expect(new Set(res.body.sessions.map((s: any) => s.squadId))).toEqual(new Set([res.body.squadId]));
   });
 

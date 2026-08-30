@@ -117,7 +117,7 @@ The server integrates with the TrueForge harness through a thin bridge (`apps/se
 - Reads sessions back into the cockpit so harness-side execution appears in the same timeline
 - Registers the `skills/*/SKILL.md` runbooks with the harness (`POST /api/harness/skills/register`)
 - Persistent sessions: a follow-up mission (`POST /api/missions/:id/resume`) appends a turn to the same harness session, so context carries without re-diagnosis
-- Parallel fan-out (`POST /api/missions/squad`): a combined mission spawns one session per matched domain, each with its own harness session
+- Parallel fan-out (`POST /api/missions/squad`): a combined mission spawns one session per specialist domain (OpsForge, SecurForge, DataForge) running in parallel, each with its own harness session
 - When the harness is not running, the local orchestrator handles missions so the platform remains fully functional in development
 
 ## Web Cockpit
@@ -165,7 +165,7 @@ Configuration is documented in `.env.example`. LLM provider keys are managed in 
 |--------|------|-------------|
 | GET | `/api/health` | Server health check |
 | POST | `/api/missions` | `{prompt}` — create a mission; auto-classifies to a subagent |
-| POST | `/api/missions/squad` | `{prompt}` — parallel subagent fan-out; one session per matched domain, shared `squadId` |
+| POST | `/api/missions/squad` | `{prompt}` — parallel subagent fan-out; one session per specialist domain (OpsForge, SecurForge, DataForge), shared `squadId` |
 | GET | `/api/missions` | List sessions |
 | GET | `/api/missions/:id` | Get session and steps |
 | POST | `/api/missions/:id/resume` | `{prompt}` — follow-up on the same mission; the harness session receives a new turn so context persists |

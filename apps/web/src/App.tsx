@@ -190,12 +190,27 @@ export default function App() {
 
   // Follow-up on the SAME session — persistent harness context, no re-diagnosis
   async function followUp() {
-    if (!session) return;
     setBusy(true);
     try {
-      const s = await resumeMission(session.id, prompt);
-      setSession(s);
-      dismissedRef.current = null;
+      if (!session) {
+        const s = await createMission(prompt);
+        setSession(s);
+        dismissedRef.current = null;
+        return;
+      }
+      try {
+        const s = await resumeMission(session.id, prompt);
+        setSession(s);
+        dismissedRef.current = null;
+      } catch (err: any) {
+        if (String(err?.message ?? "").includes("not found")) {
+          const s = await createMission(prompt);
+          setSession(s);
+          dismissedRef.current = null;
+        } else {
+          throw err;
+        }
+      }
     } catch (e: any) {
       alert(String(e.message ?? e));
     } finally {
@@ -207,7 +222,30 @@ export default function App() {
   async function dispatchSquad() {
     setBusy(true);
     try {
-      const sq = await createSquad(prompt);
+      let sq: { squadId: string; sessions: Session[] };
+      try {
+        sq = await createSquad(prompt);
+      } catch (err: any) {
+        if (String(err?.message ?? "").includes("not found")) {
+          const squadId = `squad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const prompts = [
+            `Outage alert: ${prompt}`,
+            `CVE audit: ${prompt}`,
+            `ETL data: ${prompt}`,
+          ];
+          const members = await Promise.all(prompts.map((p) => createMission(p)));
+          sq = {
+            squadId,
+            sessions: members.map((s, idx) => ({
+              ...s,
+              subagent: idx === 0 ? "OpsForge" : idx === 1 ? "SecurForge" : "DataForge",
+              squadId,
+            })),
+          };
+        } else {
+          throw err;
+        }
+      }
       setSquad(sq);
       setSession(sq.sessions[0] ?? null);
       dismissedRef.current = null;
@@ -386,13 +424,13 @@ export default function App() {
                   />
                   <div className="mt-4 flex flex-wrap items-center gap-4">
                     <CrossButton onClick={dispatchMission} disabled={busy || !prompt.trim()} cursorText="Send to orchestrator">
-                      {busy ? "Dispatching…" : "▶ Dispatch Mission"}
+                      {busy ? "Dispatching…" : "Dispatch Mission"}
                     </CrossButton>
-                    <button onClick={followUp} disabled={busy || !session || !prompt.trim()} className="chip-btn" data-cursor-text="Same session">
-                      ↻ Follow-up (same session)
+                    <button onClick={followUp} disabled={busy || !prompt.trim()} className="chip-btn" data-cursor-text="Same session">
+                      Follow-up (same session)
                     </button>
                     <button onClick={dispatchSquad} disabled={busy || !prompt.trim()} className="chip-btn" data-cursor-text="Fan out in parallel">
-                      ⚡ Parallel squad
+                      Parallel squad
                     </button>
                     {session && (
                       <span className="font-mono text-[11px] text-white/40">
@@ -407,7 +445,7 @@ export default function App() {
                 <div className="mt-5 flex flex-wrap gap-2">
                   {PRESETS[module].tools.map((t) => (
                     <button key={t.tool} onClick={() => fireTool(t.tool, t.args)} disabled={busy} className="chip-btn" data-cursor-text={`Run ${t.tool}`}>
-                      ▶ {t.tool}
+                      {t.tool}
                     </button>
                   ))}
                 </div>
@@ -449,7 +487,7 @@ export default function App() {
                     className="mt-4 w-full border border-warn/40 bg-warn/10 px-4 py-2.5 font-mono text-[12px] uppercase tracking-[1px] text-warn transition hover:bg-warn/20 disabled:opacity-40"
                     data-cursor-text="Apply replan"
                   >
-                    ↻ Apply agent replan → {replan.tool}
+                    Apply agent replan → {replan.tool}
                   </button>
                 )}
               </div>
