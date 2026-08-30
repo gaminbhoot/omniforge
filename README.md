@@ -168,7 +168,13 @@ Configuration is documented in `.env.example`. LLM provider keys are managed in 
 | POST | `/api/missions/:id/approval` | `{approved, feedback?}` — resolve a pending HITL gate |
 | GET | `/api/stream/:id` | SSE stream of session steps |
 | GET | `/api/harness/health` | TrueForge harness availability probe |
+| GET | `/api/harness/agents` | List harness agents (`ops-forge`, `secur-forge`, `data-forge`) |
+| GET / POST | `/api/harness/sessions` | List / create harness sessions |
+| GET / POST | `/api/harness/sessions/:id/turns` | Read a harness session / create a turn |
+| POST | `/api/verify` | Run the spec verifier against the current diff |
+| POST | `/api/verify/report` | Ingest a verifier verdict (from the monitor daemon) |
 | GET | `/api/verify/latest` | Latest spec-verifier verdict |
+| GET | `/api/verify/spec` | The canonical spec checklist |
 
 ## Project Structure
 
@@ -213,7 +219,9 @@ Qodo PR-Agent reviews every pull request with full repository context, configure
 | Pull request | Qodo review | Finding | Resolution |
 |--------------|-------------|---------|------------|
 | [#1 — verify Qodo automated PR review integration](https://github.com/gaminbhoot/omniforge/pull/1) | [PR Summary](https://github.com/gaminbhoot/omniforge/pull/1) and [Code Review](https://github.com/gaminbhoot/omniforge/pull/1) by `qodo-code-review` | Medium (correctness): `checkSystemHealth()` hardcoded `healthy: true`, masking real outages | Fixed: health now derived from injected dependency checks, with regression tests |
-| [#2 — security hardening and repository formalization](https://github.com/gaminbhoot/omniforge/pull/2) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/2) by `qodo-code-review` | — | Helmet and rate limiting (SA-05), read-only sandbox with PID cap (SA-02), escaped HTML rendering (SA-09), healthcheck fix |
+| [#2 — security hardening and repository formalization](https://github.com/gaminbhoot/omniforge/pull/2) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/2) by `qodo-code-review` | 2 findings (security): sandbox-isolation check bypass; layer-violation detection regression | Both fixed and confirmed resolved by Qodo |
+| [#3 — security pass 2: opt-in auth, fail-closed sandbox, resource caps](https://github.com/gaminbhoot/omniforge/pull/3) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/3) by `qodo-code-review` | 3 findings (reliability/correctness): output-cap truncation, session eviction dropping pending approvals, over-broad path check | All fixed and confirmed resolved by Qodo |
+| [#4 — full-file review: remove residual internal naming](https://github.com/gaminbhoot/omniforge/pull/4) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/4) by `qodo-code-review` | 0 findings | Clean |
 
 ## Security Practices
 
