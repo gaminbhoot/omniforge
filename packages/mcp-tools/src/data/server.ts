@@ -60,7 +60,10 @@ print(con.execute("""${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}""").fetchdf
     "Preview first N rows of a CSV in sandbox (LOW)",
     { path: z.string().default("/workspace/sample.csv"), n: z.number().default(5) },
     async ({ path, n }) => {
-      const safePath = /^\/?[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(path);
+      // Reject traversal segments ("." or "..") — the regex alone allows them;
+      // filenames like "sales..backup.csv" (no segment boundary) remain valid
+      const noTraversal = path.split("/").every((seg) => seg !== "." && seg !== "..");
+      const safePath = noTraversal && /^\/?[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(path);
       const safeN = Number.isInteger(n) && n >= 1 && n <= 100;
       if (!safePath || !safeN) {
         return { content: [{ type: "text", text: `BLOCKED: invalid path/n — refusing to run (path=${JSON.stringify(path)} n=${JSON.stringify(n)})` }] };

@@ -208,7 +208,7 @@ export default function App() {
               </thead>
               <tbody className="font-mono">
                 <tr><td>read_logs</td><td className="text-accent">LOW</td><td>auto</td></tr>
-                <tr><td>run_diagnostic</td><td className="text-warn">MED</td><td>sandbox auto</td></tr>
+                <tr><td>run_diagnostic_script</td><td className="text-warn">MED</td><td>sandbox auto</td></tr>
                 <tr><td>create_patch_pr</td><td className="text-warn">HIGH</td><td>approval</td></tr>
                 <tr><td>restart_service</td><td className="text-danger">CRIT</td><td>1-click</td></tr>
                 <tr><td>execute_write</td><td className="text-danger">CRIT</td><td>1-click</td></tr>

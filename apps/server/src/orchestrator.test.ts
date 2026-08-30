@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createSession, proposeTool, resolveApproval, getSession } from "./orchestrator.js";
 
+// The live-sandbox test runs without Docker in CI — explicitly opt into the
+// dev-only local fallback (sandboxExec fails closed without it, SA-03).
+process.env.SANDBOX_ALLOW_LOCAL = "true";
+
 describe("HITL governance in orchestrator", () => {
   it("blocks further tool proposals while an approval is pending", () => {
     const s = createSession("outage: restart api-gateway");

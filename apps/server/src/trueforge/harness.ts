@@ -9,12 +9,19 @@
 
 const HARNESS_URL = process.env.TRUEFORGE_API_URL ?? "http://localhost:8790";
 const HARNESS_BASE = HARNESS_URL.replace(/\/$/, "");
+const HARNESS_KEY = process.env.TRUEFORGE_API_KEY;
+const HARNESS_TIMEOUT_MS = 5_000;
 
 async function harnessFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = `${HARNESS_BASE}${path}`;
   return fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers as Record<string, string> ?? {}) },
+    signal: AbortSignal.timeout(HARNESS_TIMEOUT_MS),
+    headers: {
+      "Content-Type": "application/json",
+      ...(HARNESS_KEY ? { Authorization: `Bearer ${HARNESS_KEY}` } : {}),
+      ...(init?.headers as Record<string, string> ?? {}),
+    },
   });
 }
 
@@ -41,7 +48,7 @@ export async function createHarnessSession(agentName: string): Promise<HarnessSe
 }
 
 export async function createHarnessTurn(sessionId: string, content: string): Promise<HarnessTurn> {
-  const res = await harnessFetch(`/api/v1/sessions/${sessionId}/turns`, {
+  const res = await harnessFetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: "POST",
     body: JSON.stringify({ input: [{ type: "user.message", content }], stream: false }),
   });
@@ -51,7 +58,7 @@ export async function createHarnessTurn(sessionId: string, content: string): Pro
 }
 
 export async function getHarnessSession(sessionId: string): Promise<unknown> {
-  const res = await harnessFetch(`/api/v1/sessions/${sessionId}`);
+  const res = await harnessFetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}`);
   if (!res.ok) throw new Error(`harness get session ${res.status}`);
   return res.json();
 }

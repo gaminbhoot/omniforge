@@ -17,6 +17,18 @@ app.use(cors({ origin: CORS_ORIGIN }));
 app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false }));
 app.use(express.json({ limit: "1mb" }));
 
+// Opt-in API auth (SA-04): when OMNIFORGE_TOKEN is set, every mutating (non-GET)
+// request must present it as the X-API-Key header. Unset (default) keeps
+// zero-configuration localhost development and judge setups working.
+const API_TOKEN = process.env.OMNIFORGE_TOKEN;
+if (API_TOKEN) {
+  app.use((req, res, next) => {
+    if (req.method === "GET") return next();
+    if (req.headers["x-api-key"] === API_TOKEN) return next();
+    res.status(401).json({ error: "unauthorized — send the OMNIFORGE_TOKEN value as the X-API-Key header" });
+  });
+}
+
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, service: "omniforge-server", version: "0.1.0", time: new Date().toISOString() })
 );

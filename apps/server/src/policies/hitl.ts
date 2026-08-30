@@ -34,7 +34,11 @@ export type ApprovalRequest = {
 };
 
 /** Approval window (US-11: 5 minutes). Override for tests/demo via APPROVAL_TTL_MS env (ms). */
-export const APPROVAL_TTL_MS = Number(process.env.APPROVAL_TTL_MS ?? 5 * 60 * 1000);
+// Guard against a non-numeric APPROVAL_TTL_MS: Number("abc") is NaN, which
+// would make every expiresAt "Invalid Date" and isExpired() always false —
+// silently disabling the timeout control (SA-10). Fall back to 5 minutes.
+const configuredTtl = Number(process.env.APPROVAL_TTL_MS ?? 5 * 60 * 1000);
+export const APPROVAL_TTL_MS = Number.isFinite(configuredTtl) && configuredTtl > 0 ? configuredTtl : 5 * 60 * 1000;
 
 /** Deterministic, key-order-independent hash for tamper evidence. */
 export function hashArgs(args: Record<string, unknown>): string {

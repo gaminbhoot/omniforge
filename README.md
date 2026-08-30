@@ -46,7 +46,7 @@ A mission flows through the platform as follows:
 3. The agent works in steps, proposing tool calls each turn.
 4. The HITL policy engine evaluates every proposed tool against a risk matrix.
 5. Approved or low-risk calls execute locally, in the sandbox, or on the host; high-risk calls pause the session and surface an approval modal.
-6. All steps, tool outputs, and approval decisions stream to the cockpit over SSE and are appended to the audit log.
+6. All steps, tool outputs, and approval decisions are exposed to the cockpit as live updates (SSE stream endpoint plus REST polling) and are appended to the audit log.
 
 ## Architecture
 
@@ -221,7 +221,8 @@ Qodo PR-Agent reviews every pull request with full repository context, configure
 - All dynamic execution is sandboxed; the verifier fails any raw `child_process.exec` outside `runner.py`
 - Fail-safe HITL default: unregistered tools require human approval
 - Durable audit trail for every HITL decision
-- API hardening: helmet security headers, per-minute rate limiting, CORS allowlist, and CSP-safe rendering of agent output in the UI
+- API hardening: helmet security headers, per-minute rate limiting, CORS allowlist, CSP-safe rendering of agent output in the UI, and opt-in token auth (`OMNIFORGE_TOKEN` — when set, mutating requests require the `X-API-Key` header)
+- Sandboxed execution fails closed: without the sandbox container, dynamic code does not run unless `SANDBOX_ALLOW_LOCAL=true` is explicitly set (dev only)
 
 ## Implementation Index
 
