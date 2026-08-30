@@ -11,12 +11,14 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
+    "@omniforge/mcp-tools": "*",
+    "@omniforge/verifier": "*",
     "cors": "^2.8.5",
     "express": "^4.21.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "ws": "^8.18.0",
-    "zod": "^3.23.8",
-    "@omniforge/mcp-tools": "*",
-    "@omniforge/verifier": "*"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

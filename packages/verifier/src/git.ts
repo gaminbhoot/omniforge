@@ -6,7 +6,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-function sh(cmd: string, cwd = process.cwd()): string {
+function sh(cmd: string): string {
   try { return execSync(cmd, { encoding: "utf-8", stdio: ["pipe","pipe","pipe"] }).trim(); }
   catch (e: any) { return (e.stdout?.toString() ?? "").trim(); }
 }

@@ -214,15 +214,15 @@ export default function App() {
                 <tr><td>execute_write</td><td className="text-danger">CRIT</td><td>1-click</td></tr>
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-muted">The ✦ moment for judges: fire <code className="bg-white/10 px-1 rounded">restart_service</code> → modal pops → Approve → terminal confirms.</p>
+            <p className="mt-3 text-xs text-muted">Try it: run <code className="bg-white/10 px-1 rounded">restart_service</code> → the approval modal opens → Approve → the terminal confirms execution.</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <h3 className="text-sm font-bold">Project Docs</h3>
+            <h3 className="text-sm font-bold">Project Links</h3>
             <ul className="mt-2 space-y-1 text-xs text-muted">
-              <li><a className="hover:text-white underline" href="/docs/HACKATHON_GUIDE.md" target="_blank">HACKATHON_GUIDE.md</a></li>
-              <li><a className="hover:text-white underline" href="/docs/ARCHITECTURE_SPEC.md" target="_blank">ARCHITECTURE_SPEC.md</a></li>
-              <li><a className="hover:text-white underline" href="/docs/STEP_BY_STEP_PLAYBOOK.md" target="_blank">STEP_BY_STEP_PLAYBOOK.md</a></li>
-              <li><a className="hover:text-white underline" href="/docs/SUBMISSION_CHECKLIST.md" target="_blank">SUBMISSION_CHECKLIST.md</a></li>
+              <li><a className="hover:text-white underline" href="https://github.com/gaminbhoot/omniforge#readme" target="_blank" rel="noreferrer">README — overview and quick start</a></li>
+              <li><a className="hover:text-white underline" href="https://github.com/gaminbhoot/omniforge/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">CONTRIBUTING — conventions and PR checklist</a></li>
+              <li><a className="hover:text-white underline" href="https://github.com/truefoundry/trueforge" target="_blank" rel="noreferrer">TrueForge — agent harness runtime</a></li>
+              <li><a className="hover:text-white underline" href="https://modelcontextprotocol.io" target="_blank" rel="noreferrer">Model Context Protocol</a></li>
             </ul>
           </div>
         </>

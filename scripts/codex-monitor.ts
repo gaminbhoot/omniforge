@@ -19,10 +19,10 @@
  *   - Loops till Codex is done: PASS with no new diffs for 2 consecutive rounds
  *
  * The subagent mantra: do not stop till it finishes — keep polling, keep
- * verifying, surface every ⛔ FAIL with evidence + fixHint so Codex can self-correct.
+ * verifying, surface every FAIL with evidence + fixHint so the fix loop can self-correct.
  */
 
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { verify, verdictToMarkdown, verdictToJson } from "../packages/verifier/src/index.js";
@@ -72,7 +72,7 @@ async function runOnce(round: number) {
   }
   await broadcastVerdict(verdict);
 
-  const icon = verdict.overall==="PASS" ? "✅" : verdict.overall==="WARN" ? "⚠️" : "⛔";
+  const icon = verdict.overall==="PASS" ? "[ok]" : verdict.overall==="WARN" ? "[warn]" : "[FAIL]";
   console.log(`${icon} ${verdict.overall} — ${verdict.summary}`);
   console.log(`   Source: ${verdict.source} | Files: ${verdict.filesChanged.length} | ${verdict.score.passed} pass / ${verdict.score.failed} fail / ${verdict.score.warned} warn`);
   if (verdict.filesChanged.length) console.log(`   Changed: ${verdict.filesChanged.slice(0,12).join(", ")}${verdict.filesChanged.length>12?" …":""}`);
@@ -81,7 +81,7 @@ async function runOnce(round: number) {
   // verbose fails
   const fails = verdict.checks.filter((c:any)=>c.status==="fail");
   if (fails.length) {
-    console.log(`\n   ⛔ Fails (${fails.length}):`);
+    console.log(`\n   Fails (${fails.length}):`);
     for (const f of fails) {
       console.log(`     - [${f.severity}] ${f.label}: ${f.evidence.slice(0,220)}`);
       if (f.fixHint) console.log(`       ↳ Fix: ${f.fixHint}`);
@@ -89,7 +89,7 @@ async function runOnce(round: number) {
   }
   const warns = verdict.checks.filter((c:any)=>c.status==="warn");
   if (warns.length) {
-    console.log(`\n   ⚠️ Warns (${warns.length}):`);
+    console.log(`\n   Warns (${warns.length}):`);
     for (const w of warns) console.log(`     - ${w.label}: ${w.evidence.slice(0,180)}`);
   }
   console.log(`\n   Diff stat:\n${verdict.diffStat.slice(0,800)}`);
@@ -99,7 +99,7 @@ async function runOnce(round: number) {
 }
 
 async function main() {
-  console.log(`🔍 Codex Monitor — ${once ? "ONCE" : `WATCH every ${intervalSec}s`} — outDir: ${OUT_DIR}`);
+  console.log(`Spec verifier — ${once ? "ONCE" : `WATCH every ${intervalSec}s`} — outDir: ${OUT_DIR}`);
   console.log(`   Spec: omniforge-spec-v1 | SkipHeavy: ${skipHeavy} | MaxRounds: ${Number.isFinite(maxRounds)?maxRounds:"∞"}`);
   console.log(`   Tip: Codex should set branch/codex-* or commit "codex:" or env CODEX_FIX=1 to be detected as source=codex`);
 
@@ -119,7 +119,7 @@ async function main() {
     // 3) maxRounds reached
     if (once) {
       const exitCode = verdict.overall==="FAIL" ? 1 : 0;
-      console.log(`\n🏁 --once done → exit ${exitCode}`);
+      console.log(`\n--once done → exit ${exitCode}`);
       process.exit(exitCode);
     }
 
@@ -129,7 +129,7 @@ async function main() {
     else consecutivePass = 0;
 
     if (consecutivePass >= 2) {
-      console.log(`\n🏁 Stable PASS for ${consecutivePass} consecutive rounds with no new diff — Codex is done & up to spec. Monitor halting.`);
+      console.log(`\nStable PASS for ${consecutivePass} consecutive rounds with no new diff — Codex is done & up to spec. Monitor halting.`);
       console.log(`   Final verdict: ${verdict.id} — ${verdict.overall}`);
       process.exit(0);
     }
@@ -144,7 +144,7 @@ async function main() {
     await new Promise(r=>setTimeout(r, intervalSec*1000));
     round += 1;
   }
-  console.log(`\n🏁 Max rounds (${maxRounds}) reached — halting.`);
+  console.log(`\nMax rounds (${maxRounds}) reached — halting.`);
   process.exit(0);
 }
 

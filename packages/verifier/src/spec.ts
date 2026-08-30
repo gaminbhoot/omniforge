@@ -50,7 +50,7 @@ export const SPEC: Spec = {
   checks: [
     { id: "build",            label: "TypeScript build (tsc -b) passes",           severity: "critical", specRef: "CI:test_ci.yml / package.json:build", description: "No type errors; respects strict:true" },
     { id: "lint",             label: "ESLint passes (no errors)",                  severity: "high",     specRef: "CI:test_ci.yml / .eslintrc.cjs",     description: "No lint errors; warnings allowed but flagged" },
-    { id: "tests",            label: "Tests pass (vitest)",                        severity: "critical", specRef: "CI:test_ci.yml / Q Branch",          description: "No regressions — existing tests still green" },
+    { id: "tests",            label: "Tests pass (vitest)",                        severity: "critical", specRef: "CI:test_ci.yml",                    description: "No regressions — existing tests still green" },
     { id: "hitl-integrity",   label: "HITL gate integrity intact",                 severity: "critical", specRef: "ARCH:§ HITL Gate Matrix / policies/hitl.ts", description: "CRITICAL/HIGH still require approval; evaluate() not bypassed" },
     { id: "sandbox-isolation",label: "Sandbox isolation preserved",                severity: "critical", specRef: "ARCH:§ Layer 4 + policies/hitl.ts",   description: "MEDIUM executes only in sandbox; no host exec escape" },
     { id: "arch-layers",      label: "5-layer architecture respected",              severity: "high",     specRef: "ARCH:§ System Architecture",           description: "UI↔Server↔Subagents↔MCP↔QA — no layer violations" },

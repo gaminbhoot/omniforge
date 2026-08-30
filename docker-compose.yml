@@ -13,17 +13,15 @@ services:
       - omniforge
     mem_limit: 512m
     cpus: 1.0
-    read_only: false
+    pids_limit: 128
+    read_only: true
     tmpfs:
       - /tmp
+      - /home/agent
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
     command: ["tail", "-f", "/dev/null"]
 
   # Optional local DBs for DataForge demos (comment out if not needed)

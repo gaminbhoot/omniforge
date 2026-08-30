@@ -75,10 +75,10 @@ export async function verify(opts: VerifyOpts = {}): Promise<Verdict> {
   const overall: Verdict["overall"] = hasCriticalFail || hasAnyFail ? "FAIL" : warned>0 ? "WARN" : "PASS";
 
   const summary = overall==="PASS"
-    ? `✅ All checks passed — Codex fix is up to spec (${passed}/${checks.length})`
+    ? `PASS — all checks passed — code is up to spec (${passed}/${checks.length})`
     : overall==="WARN"
-    ? `⚠️ Passed with warnings — review ${warned} warn(s), 0 fails`
-    : `⛔ FAIL — ${failed} check(s) failed${hasCriticalFail ? " (incl. critical)" : ""} — fix not up to spec`;
+    ? `WARN — passed with warnings; review ${warned} warn(s), 0 fails`
+    : `FAIL — ${failed} check(s) failed${hasCriticalFail ? " (incl. critical)" : ""} — fix not up to spec`;
 
   const verdict: Verdict = {
     id, timestamp, source, base, head,
@@ -94,7 +94,7 @@ export async function verify(opts: VerifyOpts = {}): Promise<Verdict> {
 }
 
 export function verdictToMarkdown(v: Verdict): string {
-  const badge = v.overall==="PASS" ? "✅ PASS" : v.overall==="WARN" ? "⚠️ WARN" : "⛔ FAIL";
+  const badge = v.overall==="PASS" ? "PASS" : v.overall==="WARN" ? "WARN" : "FAIL";
   const lines: string[] = [];
   lines.push(`# ${badge} — Codex fix verdict \`${v.id}\``);
   lines.push(`**Source:** ${v.source} | **When:** ${v.timestamp} | **Base:** \`${v.base.slice(0,7)}\` → **Head:** \`${v.head.slice(0,7)}\``);
@@ -108,7 +108,7 @@ export function verdictToMarkdown(v: Verdict): string {
   lines.push("| Check | Severity | Status | Evidence |");
   lines.push("|---|---|---|---|");
   for (const c of v.checks) {
-    const icon = c.status==="pass" ? "✅" : c.status==="fail" ? "⛔" : c.status==="warn" ? "⚠️" : "⏭️";
+    const icon = c.status==="pass" ? "[ok]" : c.status==="fail" ? "[FAIL]" : c.status==="warn" ? "[warn]" : "[skip]";
     const ev = c.evidence.replace(/\|/g,"/").replace(/\n/g," ").slice(0,180);
     lines.push(`| ${c.label} | ${c.severity} | ${icon} ${c.status} | ${ev} |`);
   }

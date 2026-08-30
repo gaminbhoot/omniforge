@@ -30,7 +30,7 @@ export function AgentTimeline({ steps }: { steps: Step[] }) {
 }
 
 function label(s: Step) {
-  if (s.role === "hitl") return "⛔ Approval Gate";
+  if (s.role === "hitl") return "Approval Gate";
   if (s.role === "tool") return "Tool";
   if (s.role === "user") return "Operator";
   return "Agent";
@@ -51,6 +51,9 @@ function esc(t: string) {
   return t
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`(.+?)`/g, '<code class="rounded bg-white/10 px-1 py-0.5 font-mono text-xs">$1</code>');
 }

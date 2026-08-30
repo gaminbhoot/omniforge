@@ -5,7 +5,7 @@
  */
 
 import { classifyIntent, subagentFor } from "./policies/router.js";
-import { evaluate, createApprovalRequest, hashArgs, isExpired, APPROVAL_TTL_MS, type ApprovalRequest } from "./policies/hitl.js";
+import { evaluate, createApprovalRequest, isExpired, APPROVAL_TTL_MS, type ApprovalRequest } from "./policies/hitl.js";
 import { audit } from "./audit.js";
 import { sandboxExec } from "@omniforge/mcp-tools/shared/sandboxExec";
 
@@ -42,7 +42,7 @@ function sweepExpiredApproval(session: Session): void {
   req.status = "rejected";
   session.pendingApproval = null;
   session.status = "running";
-  const msg = `⏰ Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m (timeout)`;
+  const msg = `Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m (timeout)`;
   session.steps.push({
     id: stepId(),
     role: "agent",
@@ -116,7 +116,7 @@ export function proposeTool(sessionId: string, tool: string, args: Record<string
     session.steps.push({
       id: stepId(),
       role: "hitl",
-      text: `⛔ HITL gate — **${tool}** (${rule.risk}) requires approval.`,
+      text: `HITL gate — **${tool}** (${rule.risk}) requires approval.`,
       tool,
       args,
       risk: rule.risk,
@@ -183,7 +183,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
     session.steps.push({
       id: stepId(),
       role: "agent",
-      text: `⏰ Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m for **${req.tool}**.`,
+      text: `Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m for **${req.tool}**.`,
       tool: req.tool,
       args: req.args,
       timestamp: new Date().toISOString(),
@@ -198,7 +198,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
     session.steps.push({
       id: stepId(),
       role: "tool",
-      text: `✅ Approved — executing **${req.tool}** on ${req.executionMode}…`,
+      text: `Approved — executing **${req.tool}** on ${req.executionMode}…`,
       tool: req.tool,
       args: req.args,
       output: mockOutput(req.tool, req.args),
@@ -219,7 +219,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
     session.steps.push({
       id: stepId(),
       role: "agent",
-      text: `❌ Rejected — ${feedback ?? "operator rejected the action"}. Agent ${replan.text}.`,
+      text: `Rejected — ${feedback ?? "operator rejected the action"}. Agent ${replan.text}.`,
       tool: req.tool,
       args: req.args,
       suggest: replan.suggest,

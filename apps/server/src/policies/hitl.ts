@@ -1,5 +1,5 @@
 /**
- * HITL Policy Engine — the judging hinge (Double-O + Savile Row)
+ * HITL Policy Engine
  *
  * Every tool call passes through `evaluate(toolName, args)`.
  * - LOW/MEDIUM → auto-approved (MEDIUM constrained to sandbox)

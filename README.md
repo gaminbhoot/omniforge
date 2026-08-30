@@ -1,109 +1,250 @@
-# ⚡ OmniForge
+# OmniForge
 
-> **Autonomous Multi-Agent Mission Control Platform with Sandboxed Execution & Human-in-the-Loop Governance**  
-> Powered by [TrueForge](https://github.com/truefoundry/trueforge), [Model Context Protocol (MCP)](https://modelcontextprotocol.io), and [Qodo](https://www.qodo.ai/).
+Autonomous multi-agent mission control platform with sandboxed execution and human-in-the-loop (HITL) governance.
 
-Built for **The Agent Harness Hackathon (TrueForge)** by [WeMakeDevs](https://www.wemakedevs.org) & [TrueFoundry](https://www.truefoundry.com).
+OmniForge coordinates specialized AI agents through a single web cockpit. Every agent action is classified by a risk-based policy engine: low-risk reads run automatically, medium-risk code executes inside an isolated Docker sandbox, and high- or critical-risk operations pause the mission until a human approves them. Every decision is recorded in a durable audit log.
 
----
-
-## 🔗 Quick Links & Hackathon Information
-
-* 🌐 **Official Hackathon Portal:** [https://www.wemakedevs.org/hackathons/trueforge](https://www.wemakedevs.org/hackathons/trueforge)
-* 🤖 **TrueForge Core Engine:** [https://github.com/truefoundry/trueforge](https://github.com/truefoundry/trueforge)
-* 📦 **Project Repository:** [https://github.com/gaminbhoot/omniforge](https://github.com/gaminbhoot/omniforge)
-* 🔌 **Model Context Protocol (MCP):** [https://modelcontextprotocol.io](https://modelcontextprotocol.io)
-* 🛡️ **Qodo PR Agent App:** [https://github.com/apps/qodo-merge](https://github.com/apps/qodo-merge)
+Developed for the Agent Harness Hackathon (TrueForge) by [WeMakeDevs](https://www.wemakedevs.org) and [TrueFoundry](https://www.truefoundry.com). Built on [TrueForge](https://github.com/truefoundry/trueforge), the [Model Context Protocol](https://modelcontextprotocol.io), and [Qodo](https://www.qodo.ai/).
 
 ---
 
-## 🎯 What is OmniForge?
+## Table of Contents
 
-OmniForge is an enterprise-grade autonomous multi-agent cockpit that provides safe, sandboxed execution and human-in-the-loop (HITL) approval governance across 3 critical operations:
-
-1. **🛠️ OpsForge (SRE & Incident Remediation):** Outage diagnostics & safe recovery in isolated sandboxes.
-2. **🛡️ SecurForge (AppSec & Vulnerability Patching):** CVE exploit simulation and automated regression testing with Qodo.
-3. **📊 DataForge (DataOps & Sandboxed ETL):** Multi-database transformation pipelines with schema-validation approval gates.
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Human-in-the-Loop Governance](#human-in-the-loop-governance)
+4. [Sandboxed Execution](#sandboxed-execution)
+5. [MCP Tool Servers](#mcp-tool-servers)
+6. [TrueForge Harness Integration](#trueforge-harness-integration)
+7. [Web Cockpit](#web-cockpit)
+8. [Getting Started](#getting-started)
+9. [API Reference](#api-reference)
+10. [Project Structure](#project-structure)
+11. [Testing and Verification](#testing-and-verification)
+12. [Code Review](#code-review)
+13. [Security Practices](#security-practices)
+14. [Implementation Index](#implementation-index)
+15. [Contributing](#contributing)
+16. [License](#license)
 
 ---
 
-## 🏗️ Architecture
+## Overview
+
+OmniForge packages three specialized agents behind one governed execution model:
+
+| Module | Domain | Example mission |
+|--------|--------|-----------------|
+| **OpsForge** | SRE and incident remediation | Diagnose a container outage, propose a restart, execute only after approval |
+| **SecurForge** | Application security | Scan dependencies, simulate a CVE exploit in the sandbox, prepare a patch pull request |
+| **DataForge** | Data operations | Load and transform CSVs, validate schemas, gate database writes behind approval |
+
+A mission flows through the platform as follows:
+
+1. The operator submits a mission from the web cockpit.
+2. The orchestrator routes it to the matching subagent.
+3. The agent works in steps, proposing tool calls each turn.
+4. The HITL policy engine evaluates every proposed tool against a risk matrix.
+5. Approved or low-risk calls execute locally, in the sandbox, or on the host; high-risk calls pause the session and surface an approval modal.
+6. All steps, tool outputs, and approval decisions stream to the cockpit over SSE and are appended to the audit log.
+
+## Architecture
 
 ```mermaid
 flowchart TB
-    Cockpit[OmniForge Mission Control Web UI] <--> TrueForge[TrueForge Agent Orchestrator]
-    TrueForge --> SubAgents[SRE | AppSec | DataOps Subagents]
-    SubAgents <--> Tools[MCP Servers & Docker Sandbox]
-    SubAgents <--> HITL[🛑 Human-in-the-Loop Approval Gates]
-    TrueForge <--> Qodo[Qodo Continuous Quality & PR Reviews]
+    Cockpit[OmniForge Mission Control Web UI] <--> Orchestrator[Express Orchestrator + HITL Policy Engine]
+    Orchestrator --> Subagents[OpsForge | SecurForge | DataForge]
+    Subagents <--> Tools[MCP Tool Servers + Docker Sandbox]
+    Subagents <--> HITL[Approval Gates + Audit Log]
+    Orchestrator <--> Harness[TrueForge Harness Bridge]
 ```
 
----
+| Layer | Responsibility | Code |
+|-------|----------------|------|
+| Cockpit UI | Mission control, timeline, terminal stream, approval modal | `apps/web` |
+| Orchestrator | Session loop, intent routing, HITL gate enforcement, SSE | `apps/server` |
+| MCP tools | 14 typed tools across 3 servers | `packages/mcp-tools` |
+| Sandbox | Isolated Docker execution with streamed output | `packages/sandbox` |
+| Verifier | 10-check spec verifier used in CI and pre-merge | `packages/verifier` |
 
-## 🚀 Quick Start (Phase 0 Scaffold + Kick-off Guide)
+## Human-in-the-Loop Governance
+
+Every tool call is evaluated by the policy engine (`apps/server/src/policies/hitl.ts`) against 15 registered tools plus a fail-safe default: any unregistered tool is treated as HIGH risk and requires approval.
+
+| Risk | Execution mode | Approval | Examples |
+|------|----------------|----------|----------|
+| LOW | Local | Automatic | `read_logs`, `get_metrics`, `list_tables`, `query_readonly` |
+| MEDIUM | Docker sandbox only | Automatic (sandboxed) | `run_diagnostic_script`, `test_exploit`, `run_etl_script`, `validate_schema` |
+| HIGH | Host | Human review | `create_patch_pr` |
+| CRITICAL | Host / target system | One-click confirm | `restart_service`, `execute_write` |
+
+Gate behaviors:
+
+- **Approve** — the tool executes and the mission resumes.
+- **Reject with feedback** — the human's reason becomes the agent's next observation; the agent replans and the mission continues.
+- **Timeout** — pending approvals auto-reject after `APPROVAL_TTL_MS` (default 5 minutes).
+- **Re-approval** — any change to tool arguments invalidates a prior approval (arguments are hashed per request).
+- **Audit log** — every decision (pending, approved, rejected, timeout, amended) is appended to `session_cache/audit.jsonl` with actor, timestamp, tool, and outcome.
+- **Gate integrity** — while a gate is pending, no further tool proposals are accepted; the session is fully paused.
+
+## Sandboxed Execution
+
+All dynamic agent code runs inside a dedicated container (`packages/sandbox`):
+
+- `python:3.11-slim` base with `pandas`, `polars`, `duckdb`; non-root `agent` user (uid 1000)
+- Runtime isolation: `read_only: true`, `pids_limit: 128`, `cap_drop: ALL`, `no-new-privileges`, 512 MB memory, 1 CPU, tmpfs scratch at `/tmp` and `/home/agent`
+- Execution contract: `runner.py` accepts `{language, code, timeout}`, returns `{exitCode, stdout, stderr, timedOut}`, and enforces per-run timeouts
+- Streaming: stdout/stderr flow into the cockpit terminal in real time
+
+The sandbox is the only path for dynamic execution; MCP tool servers delegate to `sandboxExec.ts`, which uses Docker and falls back to a local subprocess only when `SANDBOX_DOCKER=false` is explicitly set in development.
+
+## MCP Tool Servers
+
+Three stdio MCP servers expose the tool surface (`packages/mcp-tools`), also importable in-process:
+
+| Server | Tools | Risk range |
+|--------|-------|------------|
+| **system** | `read_logs`, `get_metrics`, `inspect_container`, `run_diagnostic_script`, `restart_service` | LOW to CRITICAL |
+| **security** | `scan_dependencies`, `inspect_diff`, `test_exploit`, `create_patch_pr` | LOW to HIGH |
+| **data** | `list_tables`, `query_readonly`, `preview_csv`, `run_etl_script`, `validate_schema`, `execute_write` | LOW to CRITICAL |
+
+## TrueForge Harness Integration
+
+The server integrates with the TrueForge harness through a thin bridge (`apps/server/src/trueforge/harness.ts`):
+
+- Probes harness availability and exposes status at `/api/harness/health`
+- Creates harness sessions and turns for the three registered agents (`ops-forge`, `secur-forge`, `data-forge`)
+- Reads sessions back into the cockpit so harness-side execution appears in the same timeline
+- When the harness is not running, the local orchestrator handles missions so the platform remains fully functional in development
+
+## Web Cockpit
+
+| Component | Role |
+|-----------|------|
+| `CockpitLayout` | Page shell, mission-control header |
+| `ModuleSwitcher` | Switch between OpsForge, SecurForge, and DataForge |
+| `AgentTimeline` | Live step-by-step reasoning and tool trace |
+| `ApprovalModal` | HITL gate: risk badge, command, approve or reject with feedback |
+| `TerminalStream` | Live sandboxed stdout/stderr |
+
+## Getting Started
+
+Prerequisites: Node.js 20 or later, npm 10 or later, and Docker (for the sandbox).
 
 ```bash
-# 0. TrueForge harness (Node 22+, per kick-off guide) — in a separate terminal
-npx @truefoundry/trueforge          # → http://localhost:8790  Settings → Models → add API key
-#   then Settings → Connectors (exa/deepwiki), Skills (SKILL.md), Sandbox → Daytona (or use local Docker below)
+# 1. Clone and configure
+git clone https://github.com/gaminbhoot/omniforge.git
+cd omniforge
+cp .env.example .env
 
-# 1. env
-cp .env.example .env   # set ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL=https://api.meta.ai + ANTHROPIC_MODEL=muse-spark-1.2-contributor
+# 2. Install
+npm install
 
-# 2. install (use /tmp cache if npm perms complain)
-npm install --cache /tmp/npm-cache
-
-# 3. dev — runs web (5173) + server (3001) concurrently
+# 3. Run (web at http://localhost:5173, server at http://localhost:3001)
 npm run dev
 
-# or individually:
-npm run dev:web      # Mission Control → http://localhost:5173
-npm run dev:server   # Orchestrator  → http://localhost:3001/api/health
-
-# 4. sandbox (local Docker fallback — Daytona is the hosted alternative in harness)
+# 4. Sandbox (optional — required for MEDIUM-risk tool execution)
 docker compose up -d sandbox
 docker exec omniforge-sandbox python /usr/local/bin/runner.py <<< '{"language":"python","code":"print(42)"}'
 
-# 5. build
+# 5. TrueForge harness (optional — enables the harness bridge)
+npx @truefoundry/trueforge          # serves http://localhost:8790
+
+# 6. Build
 npm run build
 ```
 
-> **Harness note:** OmniForge server stub (`apps/server/src/orchestrator.ts`) now talks to a real TrueForge harness at `http://localhost:8790` (SQLite). Agents `ops-forge/secur-forge/data-forge` on `anthropic/muse-spark-12` with `sandbox:true` + `mcp_servers:[deepwiki, exa]` are already wired; `npx trueforge` is the source of truth per [kick-off guide](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off).
+Configuration is documented in `.env.example`. LLM provider keys are managed in the TrueForge harness, not in this server.
 
-## 📂 Monorepo Layout
+## API Reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Server health check |
+| POST | `/api/missions` | `{prompt}` — create a mission; auto-classifies to a subagent |
+| GET | `/api/missions` | List sessions |
+| GET | `/api/missions/:id` | Get session and steps |
+| POST | `/api/missions/:id/tools` | `{tool, args}` — auto-executes at LOW/MEDIUM risk; HIGH/CRITICAL returns `pendingApproval` |
+| POST | `/api/missions/:id/approval` | `{approved, feedback?}` — resolve a pending HITL gate |
+| GET | `/api/stream/:id` | SSE stream of session steps |
+| GET | `/api/harness/health` | TrueForge harness availability probe |
+| GET | `/api/verify/latest` | Latest spec-verifier verdict |
+
+## Project Structure
 
 ```
-apps/web        → Mission Control cockpit (Vite + React + Tailwind)
-apps/server     → Orchestrator + HITL policy engine + routes + SSE stream
-packages/mcp-tools → system / security / data FastMCP servers
-packages/sandbox   → Docker sandbox + runner.py
-docs/           → HACKATHON_GUIDE, ARCHITECTURE_SPEC, PLAYBOOK, CHECKLIST
+omniforge/
+├── apps/
+│   ├── web/                  # Mission-control cockpit (Vite + React + Tailwind)
+│   │   └── src/components/   # CockpitLayout, ModuleSwitcher, AgentTimeline,
+│   │                         # ApprovalModal, TerminalStream
+│   └── server/               # Orchestrator (Express)
+│       └── src/
+│           ├── orchestrator.ts      # Session loop, gate enforcement, replan
+│           ├── audit.ts             # Durable HITL audit log
+│           ├── policies/hitl.ts     # Risk matrix and approval requests
+│           ├── trueforge/harness.ts # Harness bridge
+│           └── routes/              # missions, stream (SSE), harness, verify
+├── packages/
+│   ├── mcp-tools/            # system / security / data MCP servers
+│   ├── sandbox/              # Dockerfile, runner.py, entrypoint.sh
+│   └── verifier/             # 10-check spec verifier (HITL, secrets, isolation, ...)
+├── scripts/                  # Verifier runner and install utility
+├── .github/workflows/        # CI (lint, build, test, sandbox smoke), Qodo review, gitleaks
+├── docker-compose.yml        # Sandbox (hardened) and optional demo databases
+└── CONTRIBUTING.md
 ```
 
-See [`docs/README.md`](./docs/README.md) for the full documentation index.
+## Testing and Verification
 
-## 📚 Complete Project Documentation
+```bash
+npm test            # unit tests across workspaces (vitest)
+npm run build       # type-check and build all workspaces
+npm run lint        # eslint
+npm run verify      # 10-check spec verifier; exits non-zero on failure
+```
 
-Explore our comprehensive guides in the [`docs/`](./docs) directory:
+The verifier (`packages/verifier`) checks HITL policy integrity, sandbox isolation, secrets hygiene, CI presence, and more. CI runs lint, build, tests, Python sandbox tests, and a Docker sandbox smoke build on every push and pull request.
 
-* 📊 **[Exhaustive Report & 8-Day Plan (Interactive)](./docs/EXHAUSTIVE_REPORT.md)** — [HTML](./docs/EXHAUSTIVE_REPORT.html)
-* 🏆 **[Hackathon Master Guide & Prize Strategy](./docs/HACKATHON_GUIDE.md)**
-* 🏗️ **[Technical Architecture Specification](./docs/ARCHITECTURE_SPEC.md)**
-* 🚀 **[Step-by-Step Implementation Playbook](./docs/STEP_BY_STEP_PLAYBOOK.md)**
-* 📦 **[Final Submission & Video Demo Checklist](./docs/SUBMISSION_CHECKLIST.md)**
+## Code Review
 
----
+Qodo PR-Agent reviews every pull request with full repository context, configured in `.pr_agent.toml` and `.github/workflows/qodo_review.yml`. Findings are resolved before merge.
 
-## 🏆 Targeted Hackathon Tracks
+| Pull request | Qodo review | Finding | Resolution |
+|--------------|-------------|---------|------------|
+| [#1 — verify Qodo automated PR review integration](https://github.com/gaminbhoot/omniforge/pull/1) | [PR Summary](https://github.com/gaminbhoot/omniforge/pull/1) and [Code Review](https://github.com/gaminbhoot/omniforge/pull/1) by `qodo-code-review` | Medium (correctness): `checkSystemHealth()` hardcoded `healthy: true`, masking real outages | Fixed: health now derived from injected dependency checks, with regression tests |
+| [#2 — security hardening and repository formalization](https://github.com/gaminbhoot/omniforge/pull/2) | [Code Review](https://github.com/gaminbhoot/omniforge/pull/2) by `qodo-code-review` | — | Helmet and rate limiting (SA-05), read-only sandbox with PID cap (SA-02), escaped HTML rendering (SA-09), healthcheck fix |
 
-*Per [Getting Started Guide (Aug 24)](https://www.wemakedevs.org/blogs/agent-harness-hackathon-kick-off) — $10,000 total:*
+## Security Practices
 
-* 🥇 **Double-O / Grand Prize ($5,000 NVIDIA DGX Spark):** Deep use of TrueForge runtime — real MCP tools, sandboxed execution (Docker/Daytona), HITL approvals, subagents, persistent sessions, skills, context management.
-* 🥈 **Q Branch (Mac Mini):** Code quality with **Qodo throughout development** (via [app.qodo.ai](https://app.qodo.ai/signin) + PR-Agent) — repo-context reviews, fix what it finds before merging.
-* 🌐 **Universal Exports (Interview at TrueFoundry):** Top projects earn interview — no separate track to enter.
-* 📝 **Field Report (Keychron Keyboard):** Best blog post on Dev.to/Hashnode/Medium.
-* ⭐ **Calling Card (Logitech MX Master 3):** Star [truefoundry/trueforge](https://github.com/truefoundry/trueforge) → draw entry, no project required.
-* 📻 **Radio Traffic (Swag ×10):** Top 10 social posts tagging `@WeMakeDevs` + `@TrueFoundry`.
+- No secrets in the repository: `.env` is gitignored, `.env.example` documents required variables, and `gitleaks` runs in CI
+- All dynamic execution is sandboxed; the verifier fails any raw `child_process.exec` outside `runner.py`
+- Fail-safe HITL default: unregistered tools require human approval
+- Durable audit trail for every HITL decision
+- API hardening: helmet security headers, per-minute rate limiting, CORS allowlist, and CSP-safe rendering of agent output in the UI
 
-> **Savile Row (UI/UX iPad)** was the pre-kickoff “Best UI” track — kick-off guide folds that polish into Double-O/Q Branch. The `ModuleSwitcher` + `AgentTimeline` + `TerminalStream` + `ApprovalModal` still win your video; keep it.
+## Implementation Index
 
+Where each capability lives, for quick navigation:
+
+| Capability | Location |
+|------------|----------|
+| Session loop and replanning | `apps/server/src/orchestrator.ts` (`proposeTool`, `resolveApproval`) |
+| Risk matrix (15 tools, fail-safe default) | `apps/server/src/policies/hitl.ts` |
+| Approval expiry and re-approval hashing | `apps/server/src/policies/hitl.ts` (`APPROVAL_TTL_MS`, `isExpired`, `hashArgs`) |
+| Durable audit log | `apps/server/src/audit.ts` |
+| Harness bridge | `apps/server/src/trueforge/harness.ts` |
+| SSE streaming | `apps/server/src/routes/stream.ts` |
+| MCP tool servers (14 tools) | `packages/mcp-tools/src/{system,security,data}/server.ts` |
+| Sandbox execution contract | `packages/mcp-tools/src/shared/sandboxExec.ts`, `packages/sandbox/runner.py` |
+| Container isolation | `docker-compose.yml`, `packages/sandbox/Dockerfile` |
+| Approval modal and timeline | `apps/web/src/components/ApprovalModal.tsx`, `AgentTimeline.tsx` |
+| Spec verifier | `packages/verifier/src/checks/index.ts` |
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, conventions, and the pull-request checklist. All pull requests receive an automated Qodo review; critical findings must be resolved before merge.
+
+## License
+
+[MIT](./LICENSE)
