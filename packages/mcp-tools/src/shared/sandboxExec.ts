@@ -5,7 +5,18 @@ import type { SandboxExecRequest, SandboxExecResult } from "./types.js";
 const CODE_MAX_BYTES = 64_000;
 const TIMEOUT_MIN_MS = 1_000;
 const TIMEOUT_MAX_MS = 30_000;
+/** Cap applied to each result field (stdout/stderr) returned to callers. */
 const OUTPUT_MAX_BYTES = 65_536;
+/** Generous guard on the raw runner envelope so Node-side memory stays bounded; the JSON document itself must stay intact for parsing. */
+const ENVELOPE_MAX_BYTES = 1_048_576;
+
+function overCap(current: string, max: number): boolean {
+  return Buffer.byteLength(current, "utf8") >= max;
+}
+
+function capField(v: string, max = OUTPUT_MAX_BYTES): string {
+  return Buffer.byteLength(v, "utf8") > max ? `${v.slice(0, max)}\n…[truncated]` : v;
+}
 
 /**
  * Execute code inside the local sandbox container if available.
@@ -58,18 +69,20 @@ function dockerExec(req: SandboxExecRequest): Promise<SandboxExecResult> {
       clearTimeout(timer);
       fn();
     };
-    proc.stdout.on("data", (d) => { if (out.length < OUTPUT_MAX_BYTES) out += d; });
-    proc.stderr.on("data", (d) => { if (err.length < OUTPUT_MAX_BYTES) err += d; });
+    proc.stdout.on("data", (d) => { if (!overCap(out, ENVELOPE_MAX_BYTES)) out += d; });
+    proc.stderr.on("data", (d) => { if (!overCap(err, ENVELOPE_MAX_BYTES)) err += d; });
     proc.on("error", (e) => done(() => reject(e)));
     proc.on("close", (code) => {
       done(() => {
         if (out) {
           try {
-            resolve(JSON.parse(out));
+            const parsed = JSON.parse(out) as SandboxExecResult;
+            // Cap the result fields — never the JSON envelope, which must parse intact
+            resolve({ ...parsed, stdout: capField(parsed.stdout ?? ""), stderr: capField(parsed.stderr ?? "") });
             return;
           } catch {}
         }
-        reject(new Error(`sandbox exec failed code=${code} err=${err} out=${out}`));
+        reject(new Error(`sandbox exec failed code=${code} err=${capField(err)} out=${capField(out)}`));
       });
     });
     try {
@@ -109,9 +122,9 @@ function localExec(req: SandboxExecRequest): Promise<SandboxExecResult> {
       clearTimeout(timer);
       resolve(result);
     };
-    proc.stdout.on("data", (d) => { if (stdout.length < OUTPUT_MAX_BYTES) stdout += d; });
-    proc.stderr.on("data", (d) => { if (stderr.length < OUTPUT_MAX_BYTES) stderr += d; });
-    proc.on("close", (code) => finish({ exitCode: code ?? 0, stdout, stderr, timedOut: false }));
+    proc.stdout.on("data", (d) => { if (!overCap(stdout, OUTPUT_MAX_BYTES)) stdout += d; });
+    proc.stderr.on("data", (d) => { if (!overCap(stderr, OUTPUT_MAX_BYTES)) stderr += d; });
+    proc.on("close", (code) => finish({ exitCode: code ?? 0, stdout: capField(stdout), stderr: capField(stderr), timedOut: false }));
     proc.on("error", (e) => finish({ exitCode: 1, stdout: "", stderr: String(e), timedOut: false }));
   });
 }

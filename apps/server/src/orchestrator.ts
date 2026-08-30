@@ -66,10 +66,15 @@ export function createSession(userInput: string): Session {
   const mission = classifyIntent(userInput);
   const subagent = subagentFor(mission);
   const id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  // Evict oldest sessions beyond the cap, but never one awaiting a HITL gate —
+  // dropping a pending approval would strand the mission mid-gate.
   while (sessions.size >= MAX_SESSIONS) {
-    const oldest = sessions.keys().next().value as string | undefined;
-    if (!oldest) break;
-    sessions.delete(oldest);
+    let victim: string | undefined;
+    for (const [key, s] of sessions) {
+      if (s.status !== "awaiting_approval") { victim = key; break; }
+    }
+    if (!victim) break; // all sessions are at a HITL gate — exceed the cap
+    sessions.delete(victim);
   }
   const session: Session = {
     id,
