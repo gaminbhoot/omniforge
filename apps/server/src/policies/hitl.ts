@@ -58,7 +58,7 @@ export function isExpired(req: Pick<ApprovalRequest, "expiresAt">): boolean {
   return Date.now() >= Date.parse(req.expiresAt);
 }
 
-const POLICIES: Record<string, PolicyRule> = {
+export const POLICIES: Record<string, PolicyRule> = {
   // System MCP
   read_logs: { risk: "LOW", requiresApproval: false, executionMode: "local", description: "Read logs — auto" },
   get_metrics: { risk: "LOW", requiresApproval: false, executionMode: "local", description: "Metrics — auto" },

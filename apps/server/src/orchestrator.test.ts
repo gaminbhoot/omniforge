@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createSession, proposeTool, resolveApproval, getSession } from "./orchestrator.js";
+import { createSession, proposeTool, resolveApproval, getSession, listSessions } from "./orchestrator.js";
 
 // The live-sandbox test runs without Docker in CI — explicitly opt into the
 // dev-only local fallback (sandboxExec fails closed without it, SA-03).
@@ -59,6 +59,18 @@ describe("HITL governance in orchestrator", () => {
     expect(step.text).toContain("sandbox");
   });
 
+  it("rejected execute_write replans to a read-only preview that auto-executes (no second gate)", () => {
+    const s = createSession("etl: write results to staging");
+    proposeTool(s.id, "execute_write", { sql: "INSERT INTO staging.orders SELECT * FROM raw.orders", connection: "postgres" });
+    const resolved = resolveApproval(s.id, false, "not until reviewed");
+    const last = resolved.steps[resolved.steps.length - 1];
+    expect(last.suggest?.tool).toBe("query_readonly");
+    // the one-click suggestion must NOT open another approval modal
+    const after = proposeTool(s.id, last.suggest!.tool, last.suggest!.args);
+    expect(after.pendingApproval).toBeNull();
+    expect(after.steps[after.steps.length - 1].role).toBe("tool");
+  });
+
   it("routes sandbox tools through live sandboxExec, not mock output", () => {
     const s = createSession("etl data");
     const after = proposeTool(s.id, "run_etl_script", { language: "python", code: "print('live-etl-check')" });
@@ -71,11 +83,58 @@ describe("HITL governance in orchestrator", () => {
     }, 3000));
   });
 
+  it("sandbox tools fail closed when the local fallback is not opted in (SA-03)", async () => {
+    const prevLocal = process.env.SANDBOX_ALLOW_LOCAL;
+    const prevDocker = process.env.SANDBOX_DOCKER;
+    delete process.env.SANDBOX_ALLOW_LOCAL;
+    process.env.SANDBOX_DOCKER = "false"; // skip Docker entirely — deterministic without a daemon
+    try {
+      const s = createSession("etl data");
+      const after = proposeTool(s.id, "run_etl_script", { language: "python", code: "print('must-not-run')" });
+      const step = after.steps[after.steps.length - 1];
+      await new Promise((r) => setTimeout(r, 200));
+      expect(step.output).toContain("sandboxExec error");
+      expect(step.output).toContain("SANDBOX_ALLOW_LOCAL");
+    } finally {
+      if (prevLocal === undefined) delete process.env.SANDBOX_ALLOW_LOCAL; else process.env.SANDBOX_ALLOW_LOCAL = prevLocal;
+      if (prevDocker === undefined) delete process.env.SANDBOX_DOCKER; else process.env.SANDBOX_DOCKER = prevDocker;
+    }
+  });
+
+  it("validate_schema renders a structured mock, not a placeholder", () => {
+    const s = createSession("data: validate schema");
+    const after = proposeTool(s.id, "validate_schema", { table: "orders" });
+    const step = after.steps[after.steps.length - 1];
+    expect(step.output).not.toContain("[mock output");
+    const parsed = JSON.parse(step.output!);
+    expect(parsed.status).toBe("valid");
+  });
+
   it("generates unique step ids even for rapid successive calls", () => {
     const s = createSession("etl data");
     proposeTool(s.id, "list_tables", {});
     proposeTool(s.id, "list_tables", {});
     const ids = getSession(s.id)!.steps.map((st) => st.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("bounds the session store without dropping a pending approval (SA-12)", () => {
+    const gated = createSession("outage: restart api-gateway");
+    proposeTool(gated.id, "restart_service", { service: "api-gateway" });
+    expect(gated.status).toBe("awaiting_approval");
+
+    // fill the store past the cap; the awaiting-approval session must survive
+    for (let i = 0; i < 250; i++) createSession(`filler mission ${i}`);
+    expect(getSession(gated.id)).toBeDefined();
+    expect(getSession(gated.id)?.pendingApproval?.tool).toBe("restart_service");
+    expect(listSessions().length).toBeLessThanOrEqual(201);
+  });
+
+  it("timeout path announces the replan consistently with the sweep path", () => {
+    const s = createSession("outage: restart api-gateway");
+    proposeTool(s.id, "restart_service", { service: "api-gateway" });
+    const resolved = resolveApproval(s.id, false); // rejection path
+    const rejected = resolved.steps.at(-1)!.text;
+    expect(rejected).toContain("replanning");
   });
 });
