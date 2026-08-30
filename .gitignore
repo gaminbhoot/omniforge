@@ -105,5 +105,6 @@ tmp/
 # --- Internal Planning Documents (kept locally, not published) ---
 docs/
 
-# --- TypeScript Build Cache ---
+# --- TypeScript Build Cache & Coverage Reports ---
 *.tsbuildinfo
+coverage/
