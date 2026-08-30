@@ -1,5 +1,5 @@
 /**
- * Verifier engine — runs all spec checks against a Codex diff.
+ * Verifier engine — runs all spec checks against the current diff.
  * Usage:
  *   import { verify } from "./index.js";
  *   const verdict = await verify(); // auto-detects diff
@@ -96,7 +96,7 @@ export async function verify(opts: VerifyOpts = {}): Promise<Verdict> {
 export function verdictToMarkdown(v: Verdict): string {
   const badge = v.overall==="PASS" ? "PASS" : v.overall==="WARN" ? "WARN" : "FAIL";
   const lines: string[] = [];
-  lines.push(`# ${badge} — Codex fix verdict \`${v.id}\``);
+  lines.push(`# ${badge} — Spec verifier verdict \`${v.id}\``);
   lines.push(`**Source:** ${v.source} | **When:** ${v.timestamp} | **Base:** \`${v.base.slice(0,7)}\` → **Head:** \`${v.head.slice(0,7)}\``);
   lines.push(`**Provenance:** ${(v as any).provenance} | **Files:** ${v.filesChanged.length} | **Score:** ${v.score.passed} pass / ${v.score.failed} fail / ${v.score.warned} warn / ${v.score.skipped} skip`);
   lines.push(`> ${v.summary}`);

@@ -1,6 +1,6 @@
 /**
  * Canonical spec definition — what "up to spec" means for OmniForge.
- * Every Codex fix is judged against this. Edit here to tighten/loosen.
+ * Every change is verified against this spec. Edit here to tighten/loosen.
  * Refs point to docs so verdicts are auditable.
  */
 

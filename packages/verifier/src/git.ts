@@ -1,7 +1,7 @@
 /**
- * Git helpers — detect what Codex changed.
+ * Git helpers — determine what changed and where the change came from.
  * Strategy: prefer `origin/main...HEAD` if origin/main exists,
- * else HEAD vs staged/unstaged. Also detects codex provenance.
+ * else HEAD vs staged/unstaged. Also detects change provenance.
  */
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";

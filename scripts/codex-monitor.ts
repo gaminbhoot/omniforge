@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Codex Monitor — subagent that watches Codex fixes and verifies till done.
+ * Spec Monitor — runs the spec verifier against the current change set,
  *
  * Modes:
  *   --once        Run one verify pass and exit (CI-friendly: exit 1 on FAIL)
@@ -12,11 +12,11 @@
  *   --md          Also write markdown report
  *
  * Behavior:
- *   - Detects Codex provenance via branch/commit/author/env
+ *   - Detects change provenance via branch/commit/author/env
  *   - Runs verifier (spec.ts checklist) against current diff (origin/main...HEAD or working tree)
  *   - Writes reports to tmp/codex-monitor/latest.json + verify-*.json + latest.md
  *   - Broadcasts to server's /api/verify if server is up (best-effort)
- *   - Loops till Codex is done: PASS with no new diffs for 2 consecutive rounds
+ *   - Watch mode halts on stable PASS with no new diffs for 2 consecutive rounds
  *
  * The subagent mantra: do not stop till it finishes — keep polling, keep
  * verifying, surface every FAIL with evidence + fixHint so the fix loop can self-correct.
@@ -101,7 +101,7 @@ async function runOnce(round: number) {
 async function main() {
   console.log(`Spec verifier — ${once ? "ONCE" : `WATCH every ${intervalSec}s`} — outDir: ${OUT_DIR}`);
   console.log(`   Spec: omniforge-spec-v1 | SkipHeavy: ${skipHeavy} | MaxRounds: ${Number.isFinite(maxRounds)?maxRounds:"∞"}`);
-  console.log(`   Tip: Codex should set branch/codex-* or commit "codex:" or env CODEX_FIX=1 to be detected as source=codex`);
+  console.log(`   Tip: provenance is detected from branch/codex-* prefixes, "codex:" commit messages, or CODEX_FIX=1`);
 
   let round = 1;
   let consecutivePass = 0;
@@ -115,7 +115,7 @@ async function main() {
 
     // termination: do not stop till it finishes — we stop only when
     // 1) --once (single round)
-    // 2) PASS and no new diff for 2 consecutive rounds (Codex quiesced)
+    // 2) PASS and no new diff for 2 consecutive rounds (change set quiesced)
     // 3) maxRounds reached
     if (once) {
       const exitCode = verdict.overall==="FAIL" ? 1 : 0;
@@ -129,14 +129,14 @@ async function main() {
     else consecutivePass = 0;
 
     if (consecutivePass >= 2) {
-      console.log(`\nStable PASS for ${consecutivePass} consecutive rounds with no new diff — Codex is done & up to spec. Monitor halting.`);
+      console.log(`\nStable PASS for ${consecutivePass} consecutive rounds with no new diff — up to spec. Monitor halting.`);
       console.log(`   Final verdict: ${verdict.id} — ${verdict.overall}`);
       process.exit(0);
     }
 
     lastHead = head; lastDiffSig = diffSig;
 
-    // Also stop if Codex hasn't produced any diff at all for 3 rounds and we're not codex source — nothing to monitor
+    // Also stop if no diff at all for 3 rounds on a non-agent source — nothing to monitor
     // (keeps the "do not stop till it finishes" promise when there's actual work, but avoids infinite idle)
     // We don't auto-stop on that — we keep watching; only PASS-quiescence stops.
 

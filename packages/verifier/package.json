@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Spec-verifier for Codex fixes — Muse audits whether patches are up to OmniForge spec",
+  "description": "Spec verifier — 10 automated checks incl. HITL integrity, sandbox isolation, and secrets hygiene",
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
