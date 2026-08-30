@@ -37,7 +37,9 @@ missionsRouter.post("/:id/resume", (req, res) => {
     const session = resumeSession(req.params.id, prompt);
     res.json(session);
   } catch (e: any) {
-    res.status(404).json({ error: e.message });
+    // 404 = unknown session; 409 = state conflict (e.g. pending HITL gate) — same contract as /tools
+    const code = String(e?.message ?? "").includes("not found") ? 404 : 409;
+    res.status(code).json({ error: e.message });
   }
 });
 

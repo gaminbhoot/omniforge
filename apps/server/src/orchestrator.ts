@@ -69,6 +69,24 @@ function stepId(): string {
 }
 
 /**
+ * Governance preamble prepended to every harness turn: harness-side agents
+ * must PROPOSE gated actions, not execute them. Execution of HIGH/CRITICAL
+ * tools only happens after an operator approval via the local HITL engine.
+ */
+const HARNESS_GOVERNANCE_PREAMBLE =
+  "[OmniForge governance] This session is governed by the OmniForge HITL policy engine. " +
+  "LOW-risk reads may run automatically; MEDIUM-risk code must run inside the Docker sandbox; " +
+  "HIGH/CRITICAL actions must be PROPOSED ONLY and wait for an operator approval turn — never execute them directly.\n\n";
+
+/**
+ * In-flight harness attachments by session id — lets resume() queue follow-ups
+ * that arrive while attachment is still running, instead of dropping them.
+ */
+const pendingAttach = new Map<string, Promise<string | null>>();
+/** Follow-up prompts accepted before attachment completed, flushed in order on attach */
+const queuedFollowUps = new Map<string, string[]>();
+
+/**
  * Attach the mission to the TrueForge harness runtime (fire-and-forget): a
  * harness session + first turn is created for the subagent so execution runs
  * through the harness and context persists across turns. Silent fallback to
@@ -76,23 +94,44 @@ function stepId(): string {
  */
 async function attachHarness(session: Session, prompt: string): Promise<void> {
   if (process.env.VITEST) return;
-  try {
-    if (!(await isHarnessAvailable())) return;
-    const agent = harnessAgentFor(session.subagent);
-    const hs = await createHarnessSession(agent);
-    await createHarnessTurn(hs.id, prompt);
-    session.harnessSessionId = hs.id;
-    session.harnessAgent = agent;
-    session.steps.push({
-      id: stepId(),
-      role: "agent",
-      text: `TrueForge harness attached — agent **${agent}**, session \`${hs.id}\`. Mission executes through the harness runtime; context persists across turns.`,
-      timestamp: new Date().toISOString(),
-    });
-    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: `harness-${hs.id}`, tool: "harness.attach", risk: "LOW", decision: "approved", actor: "system:harness", reason: `harness session ${hs.id}` });
-  } catch {
-    // harness unavailable mid-attach — local orchestrator mode, nothing to do
+  const attempt = (async (): Promise<string | null> => {
+    try {
+      if (!(await isHarnessAvailable())) return null;
+      const agent = harnessAgentFor(session.subagent);
+      const hs = await createHarnessSession(agent);
+      await createHarnessTurn(hs.id, HARNESS_GOVERNANCE_PREAMBLE + prompt);
+      return hs.id;
+    } catch {
+      return null;
+    }
+  })();
+  pendingAttach.set(session.id, attempt);
+  const hsId = await attempt;
+  pendingAttach.delete(session.id);
+  if (!hsId) {
+    // attachment failed — queued follow-ups live on locally only
+    queuedFollowUps.delete(session.id);
+    return;
   }
+  session.harnessSessionId = hsId;
+  session.harnessAgent = harnessAgentFor(session.subagent);
+  // flush follow-ups accepted while attachment was in flight, in order
+  const queued = queuedFollowUps.get(session.id) ?? [];
+  for (const q of queued) {
+    try {
+      await createHarnessTurn(hsId, HARNESS_GOVERNANCE_PREAMBLE + q);
+    } catch {
+      // harness lost mid-flush — remaining follow-ups stay local
+    }
+  }
+  queuedFollowUps.delete(session.id);
+  session.steps.push({
+    id: stepId(),
+    role: "agent",
+    text: `TrueForge harness attached — agent **${session.harnessAgent}**, session \`${hsId}\`. Mission executes through the harness runtime with HITL governance; context persists across turns.`,
+    timestamp: new Date().toISOString(),
+  });
+  audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: `harness-${hsId}`, tool: "harness.attach", risk: "LOW", decision: "approved", actor: "system:harness", reason: `harness session ${hsId}` });
 }
 
 export function createSession(userInput: string): Session {
@@ -161,7 +200,19 @@ export function resumeSession(sessionId: string, prompt: string): Session {
       output: undefined,
       timestamp: new Date().toISOString(),
     });
-    void createHarnessTurn(hsId, prompt).catch(() => { /* harness lost mid-mission — local mode continues */ });
+    void createHarnessTurn(hsId, HARNESS_GOVERNANCE_PREAMBLE + prompt).catch(() => { /* harness lost mid-mission — local mode continues */ });
+  } else if (pendingAttach.has(session.id)) {
+    // Attachment still in flight — queue the follow-up so it reaches the
+    // harness (in order) once the session id is known. Never claim "appended"
+    // before the request can actually be made.
+    queuedFollowUps.set(session.id, [...(queuedFollowUps.get(session.id) ?? []), prompt]);
+    session.steps.push({
+      id: stepId(),
+      role: "tool",
+      text: `→ follow-up queued — harness attachment in flight; turn will be appended once the harness session is established`,
+      output: undefined,
+      timestamp: new Date().toISOString(),
+    });
   }
   session.status = "running";
   return session;

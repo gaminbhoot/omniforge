@@ -118,6 +118,14 @@ describe("mission lifecycle over HTTP", () => {
     expect(noPrompt.status).toBe(400);
   });
 
+  it("409s a resume blocked by a pending HITL gate (same contract as /tools)", async () => {
+    const s = createSession("outage: restart api-gateway");
+    await request(app).post(`/api/missions/${s.id}/tools`).send({ tool: "restart_service", args: { service: "api-gateway" } });
+    const res = await request(app).post(`/api/missions/${s.id}/resume`).send({ prompt: "try again" });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/approval pending/i);
+  });
+
   it("fans out a parallel squad on POST /squad", async () => {
     const res = await request(app).post("/api/missions/squad").send({ prompt: "outage on api-gateway and a CVE in lodash" });
     expect(res.status).toBe(201);

@@ -123,6 +123,8 @@ export default function App() {
       try {
         const s = await getMission(session.id);
         setSession(s);
+        // keep squad cards in sync with polled member state (no stale snapshots)
+        setSquad((sq) => (sq ? { ...sq, sessions: sq.sessions.map((m) => (m.id === s.id ? s : m)) } : sq));
         if (s.pendingApproval && s.pendingApproval.id !== dismissedRef.current) setApprovalOpen(true);
       } catch {}
     }, 1500);
@@ -209,6 +211,21 @@ export default function App() {
       setSquad(sq);
       setSession(sq.sessions[0] ?? null);
       dismissedRef.current = null;
+    } catch (e: any) {
+      alert(String(e.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Select a squad member — fetch fresh server state, never trust the card snapshot
+  async function selectSquadMember(memberId: string) {
+    setBusy(true);
+    try {
+      const fresh = await getMission(memberId);
+      setSession(fresh);
+      dismissedRef.current = null;
+      if (fresh.pendingApproval) setApprovalOpen(true);
     } catch (e: any) {
       alert(String(e.message ?? e));
     } finally {
@@ -406,7 +423,7 @@ export default function App() {
                       {squad.sessions.map((m) => (
                         <button
                           key={m.id}
-                          onClick={() => setSession(m)}
+                          onClick={() => selectSquadMember(m.id)}
                           className="border px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[1px] transition"
                           style={{
                             borderColor: session?.id === m.id ? "var(--accent, #4ade80)" : "rgba(255,255,255,.15)",
