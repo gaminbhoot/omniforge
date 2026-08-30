@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createSession, getSession, listSessions, proposeTool, resolveApproval } from "../orchestrator.js";
+import { createSession, getSession, listSessions, proposeTool, resolveApproval, resumeSession, fanoutSquad } from "../orchestrator.js";
 
 export const missionsRouter = Router();
 
@@ -11,6 +11,14 @@ missionsRouter.post("/", (req, res) => {
   res.status(201).json(session);
 });
 
+// POST /api/missions/squad — parallel subagent fan-out (one session per matched domain)
+missionsRouter.post("/squad", (req, res) => {
+  const { prompt } = req.body ?? {};
+  if (!prompt || typeof prompt !== "string") return res.status(400).json({ error: "prompt (string) required" });
+  const squad = fanoutSquad(prompt);
+  res.status(201).json(squad);
+});
+
 // GET /api/missions — list
 missionsRouter.get("/", (_req, res) => res.json(listSessions()));
 
@@ -19,6 +27,20 @@ missionsRouter.get("/:id", (req, res) => {
   const s = getSession(req.params.id);
   if (!s) return res.status(404).json({ error: "not found" });
   res.json(s);
+});
+
+// POST /api/missions/:id/resume — follow-up on the same session (persistent context)
+missionsRouter.post("/:id/resume", (req, res) => {
+  const { prompt } = req.body ?? {};
+  if (!prompt || typeof prompt !== "string") return res.status(400).json({ error: "prompt (string) required" });
+  try {
+    const session = resumeSession(req.params.id, prompt);
+    res.json(session);
+  } catch (e: any) {
+    // 404 = unknown session; 409 = state conflict (e.g. pending HITL gate) — same contract as /tools
+    const code = String(e?.message ?? "").includes("not found") ? 404 : 409;
+    res.status(code).json({ error: e.message });
+  }
 });
 
 // POST /api/missions/:id/tools — propose a tool call (triggers HITL if needed)

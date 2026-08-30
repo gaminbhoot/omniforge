@@ -37,7 +37,7 @@ export function ApprovalModal({ open, request, onApprove, onReject, onClose }: P
         <div className="mt-6 flex gap-3">
           <div className="flex-1">
             <CrossButton onClick={onApprove} cursorText="Execute" className="w-full">
-              <span className="font-sans font-normal normal-case">✓ Approve &amp; Execute</span>
+              <span className="font-sans font-normal normal-case">Approve &amp; Execute</span>
             </CrossButton>
           </div>
           <div className="flex-1">
@@ -49,7 +49,7 @@ export function ApprovalModal({ open, request, onApprove, onReject, onClose }: P
               cursorText="Send back"
               className="w-full"
             >
-              <span className="font-sans font-normal normal-case">✕ Reject</span>
+              <span className="font-sans font-normal normal-case">Reject</span>
             </CrossButton>
           </div>
         </div>

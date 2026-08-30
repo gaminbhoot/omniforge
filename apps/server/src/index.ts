@@ -37,6 +37,13 @@ app.use("/api/stream", streamRouter);
 app.use("/api/verify", verifyRouter);
 app.use("/api/harness", harnessRouter);
 
+// Global JSON error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[server error]", err);
+  const status = typeof err?.status === "number" ? err.status : 500;
+  res.status(status).json({ error: err?.message ?? "internal server error" });
+});
+
 // Fallback for unknown routes
 app.use((_req, res) => res.status(404).json({ error: "not found" }));
 

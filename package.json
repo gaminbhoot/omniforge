@@ -10,6 +10,7 @@
     "packages/mcp-tools/*"
   ],
   "scripts": {
+    "all": "docker compose up -d sandbox 2>/dev/null || true; concurrently -n \"SERVER,WEB\" -c \"green,cyan\" \"npm run dev:server\" \"npm run dev:web\"",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
     "dev:web": "npm --workspace apps/web run dev",
     "dev:server": "npm --workspace apps/server run dev",

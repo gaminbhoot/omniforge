@@ -80,3 +80,22 @@ const SUBAGENT_TO_HARNESS: Record<string, string> = {
 export function harnessAgentFor(subagent: string): string {
   return SUBAGENT_TO_HARNESS[subagent] ?? "ops-forge";
 }
+
+// --- Skills (SKILL.md runbooks registered with the harness) ---
+
+export type HarnessSkill = { name: string; description: string; content: string };
+
+export async function listHarnessSkills(): Promise<unknown> {
+  const res = await harnessFetch("/api/v1/skills");
+  if (!res.ok) throw new Error(`harness list skills ${res.status}`);
+  return res.json();
+}
+
+export async function registerHarnessSkill(skill: HarnessSkill): Promise<unknown> {
+  const res = await harnessFetch("/api/v1/skills", {
+    method: "POST",
+    body: JSON.stringify(skill),
+  });
+  if (!res.ok) throw new Error(`harness register skill ${res.status}: ${await res.text()}`);
+  return res.json();
+}
