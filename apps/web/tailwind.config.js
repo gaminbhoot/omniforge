@@ -4,15 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#0a0a0f",
-        panel: "#11111a",
-        muted: "#9aa0b2",
-        accent: "#6ee7b7",
-        warn: "#f59e0b",
-        danger: "#ef4444",
+        ink: "#0f0f0f",
+        panel: "#141414",
+        muted: "rgba(255,255,255,0.55)",
+        line: "rgba(255,255,255,0.1)",
+        mark: "#d9d9d9",
+        accent: "#7dd493",
+        warn: "#e2b34c",
+        danger: "#fb8989",
       },
       fontFamily: {
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
         sans: ["Inter", "system-ui", "sans-serif"],
       },
     },

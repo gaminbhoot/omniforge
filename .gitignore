@@ -108,3 +108,6 @@ docs/
 # --- TypeScript Build Cache & Coverage Reports ---
 *.tsbuildinfo
 coverage/
+
+# ambient video asset (user-supplied, not distributed)
+apps/web/public/mbg.mp4
