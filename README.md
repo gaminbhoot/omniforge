@@ -170,11 +170,13 @@ Configuration is documented in `.env.example`. LLM provider keys are managed in 
 | GET | `/api/harness/health` | TrueForge harness availability probe |
 | GET | `/api/harness/agents` | List harness agents (`ops-forge`, `secur-forge`, `data-forge`) |
 | GET / POST | `/api/harness/sessions` | List / create harness sessions |
-| GET / POST | `/api/harness/sessions/:id/turns` | Read a harness session / create a turn |
+| GET | `/api/harness/sessions/:id` | Read a harness session |
+| POST | `/api/harness/sessions/:id/turns` | Create a harness turn |
 | POST | `/api/verify` | Run the spec verifier against the current diff |
 | POST | `/api/verify/report` | Ingest a verifier verdict (from the monitor daemon) |
 | GET | `/api/verify/latest` | Latest spec-verifier verdict |
 | GET | `/api/verify/spec` | The canonical spec checklist |
+| GET | `/api/verify/health` | Verify-route health and spec version |
 
 ## Project Structure
 
