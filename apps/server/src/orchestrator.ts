@@ -4,10 +4,11 @@
  * when the harness drops; keep the public interface stable.
  */
 
-import { classifyIntent, subagentFor } from "./policies/router.js";
+import { classifyIntent, subagentFor, classifyAll } from "./policies/router.js";
 import { evaluate, createApprovalRequest, isExpired, APPROVAL_TTL_MS, type ApprovalRequest } from "./policies/hitl.js";
 import { audit } from "./audit.js";
 import { sandboxExec } from "@omniforge/mcp-tools/shared/sandboxExec";
+import { isHarnessAvailable, createHarnessSession, createHarnessTurn, harnessAgentFor } from "./trueforge/harness.js";
 
 export type Step = {
   id: string;
@@ -29,6 +30,11 @@ export type Session = {
   steps: Step[];
   pendingApproval: ApprovalRequest | null;
   status: "running" | "awaiting_approval" | "done";
+  /** TrueForge harness runtime — set when the harness is reachable at mission time */
+  harnessSessionId?: string;
+  harnessAgent?: string;
+  /** Set on every member of a parallel subagent squad */
+  squadId?: string;
 };
 
 const sessions = new Map<string, Session>();
@@ -62,6 +68,33 @@ function stepId(): string {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/**
+ * Attach the mission to the TrueForge harness runtime (fire-and-forget): a
+ * harness session + first turn is created for the subagent so execution runs
+ * through the harness and context persists across turns. Silent fallback to
+ * the local orchestrator when the harness is unreachable. Skipped under test.
+ */
+async function attachHarness(session: Session, prompt: string): Promise<void> {
+  if (process.env.VITEST) return;
+  try {
+    if (!(await isHarnessAvailable())) return;
+    const agent = harnessAgentFor(session.subagent);
+    const hs = await createHarnessSession(agent);
+    await createHarnessTurn(hs.id, prompt);
+    session.harnessSessionId = hs.id;
+    session.harnessAgent = agent;
+    session.steps.push({
+      id: stepId(),
+      role: "agent",
+      text: `TrueForge harness attached — agent **${agent}**, session \`${hs.id}\`. Mission executes through the harness runtime; context persists across turns.`,
+      timestamp: new Date().toISOString(),
+    });
+    audit({ at: new Date().toISOString(), sessionId: session.id, approvalId: `harness-${hs.id}`, tool: "harness.attach", risk: "LOW", decision: "approved", actor: "system:harness", reason: `harness session ${hs.id}` });
+  } catch {
+    // harness unavailable mid-attach — local orchestrator mode, nothing to do
+  }
+}
+
 export function createSession(userInput: string): Session {
   const mission = classifyIntent(userInput);
   const subagent = subagentFor(mission);
@@ -93,7 +126,63 @@ export function createSession(userInput: string): Session {
     status: "running",
   };
   sessions.set(id, session);
+  void attachHarness(session, userInput);
   return session;
+}
+
+/**
+ * Persistent-session follow-up: append a new instruction to an EXISTING
+ * mission instead of starting cold. The same harness session receives a new
+ * turn, so the agent carries all prior context (diagnosis, tool outputs,
+ * approvals) into the follow-up — no re-diagnosis.
+ */
+export function resumeSession(sessionId: string, prompt: string): Session {
+  const session = sessions.get(sessionId);
+  if (!session) throw new Error(`session not found: ${sessionId}`);
+  sweepExpiredApproval(session);
+  if (session.status === "awaiting_approval") {
+    // Gate integrity — a paused mission cannot accept new instructions
+    throw new Error(`approval pending for "${session.pendingApproval?.tool}" — resolve the HITL gate before resuming`);
+  }
+  session.steps.push({ id: stepId(), role: "user", text: prompt, timestamp: new Date().toISOString() });
+  const priorContext = session.steps.length - 1;
+  session.steps.push({
+    id: stepId(),
+    role: "agent",
+    text: `Follow-up on the same mission — carrying context from ${priorContext} prior step${priorContext === 1 ? "" : "s"} (persistent session, no re-diagnosis).`,
+    timestamp: new Date().toISOString(),
+  });
+  if (session.harnessSessionId) {
+    const hsId = session.harnessSessionId;
+    session.steps.push({
+      id: stepId(),
+      role: "tool",
+      text: `→ harness turn appended to session \`${hsId}\` (agent ${session.harnessAgent})`,
+      output: undefined,
+      timestamp: new Date().toISOString(),
+    });
+    void createHarnessTurn(hsId, prompt).catch(() => { /* harness lost mid-mission — local mode continues */ });
+  }
+  session.status = "running";
+  return session;
+}
+
+/**
+ * Parallel subagent fan-out — a combined mission spawns one session per
+ * matched domain (OpsForge + SecurForge + DataForge), each attached to its own
+ * harness session. Members share a squadId; work runs concurrently.
+ */
+export function fanoutSquad(prompt: string): { squadId: string; sessions: Session[] } {
+  const squadId = `squad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const members = classifyAll(prompt).map((mission) => {
+    const s = createSession(prompt);
+    s.mission = mission;
+    s.subagent = subagentFor(mission);
+    s.squadId = squadId;
+    s.steps[1].text = `Squad **${squadId}** → **${s.subagent}** (${mission.reason}). Running in parallel with the squad.`;
+    return s;
+  });
+  return { squadId, sessions: members };
 }
 
 export function getSession(id: string): Session | undefined {

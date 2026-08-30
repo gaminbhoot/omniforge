@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createSession, proposeTool, resolveApproval, getSession, listSessions } from "./orchestrator.js";
+import { createSession, proposeTool, resolveApproval, getSession, listSessions, resumeSession, fanoutSquad } from "./orchestrator.js";
 
 // The live-sandbox test runs without Docker in CI — explicitly opt into the
 // dev-only local fallback (sandboxExec fails closed without it, SA-03).
@@ -136,5 +136,60 @@ describe("HITL governance in orchestrator", () => {
     const resolved = resolveApproval(s.id, false); // rejection path
     const rejected = resolved.steps.at(-1)!.text;
     expect(rejected).toContain("replanning");
+  });
+});
+
+describe("persistent sessions (follow-up on the same mission)", () => {
+  it("appends the follow-up to the same session and keeps prior steps", () => {
+    const s = createSession("outage: restart api-gateway");
+    proposeTool(s.id, "read_logs", { service: "api-gateway" });
+    const before = getSession(s.id)!.steps.length;
+
+    const resumed = resumeSession(s.id, "is it still healthy?");
+    expect(resumed.id).toBe(s.id);
+    expect(resumed.status).toBe("running");
+    expect(resumed.pendingApproval).toBeNull();
+    expect(resumed.steps.length).toBeGreaterThan(before);
+    expect(resumed.steps.some((st) => st.role === "user" && st.text === "is it still healthy?")).toBe(true);
+    expect(resumed.steps.some((st) => /context from \d+ prior steps/i.test(st.text))).toBe(true);
+  });
+
+  it("rejects a follow-up on an unknown session", () => {
+    expect(() => resumeSession("sess_missing", "hello")).toThrow(/not found/i);
+  });
+
+  it("a pending HITL gate blocks a follow-up just like a tool proposal (gate integrity)", () => {
+    const s = createSession("outage: restart api-gateway");
+    proposeTool(s.id, "restart_service", { service: "api-gateway" });
+    expect(() => resumeSession(s.id, "try again now")).toThrow(/approval pending/i);
+    expect(getSession(s.id)?.pendingApproval?.tool).toBe("restart_service");
+  });
+});
+
+describe("parallel subagent squad fan-out", () => {
+  it("spawns one session per matched domain sharing a squadId", () => {
+    const { squadId, sessions } = fanoutSquad("outage on api-gateway and a CVE in lodash — handle both");
+    expect(squadId).toMatch(/^squad_/);
+    expect(sessions.length).toBe(2);
+    expect(new Set(sessions.map((s) => s.subagent))).toEqual(new Set(["OpsForge", "SecurForge"]));
+    for (const s of sessions) {
+      expect(s.squadId).toBe(squadId);
+      expect(s.status).toBe("running");
+      expect(s.steps[1].text).toContain("parallel");
+    }
+  });
+
+  it("falls back to a single general member when no domain matches", () => {
+    const { sessions } = fanoutSquad("do the thing");
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].subagent).toBe("General");
+  });
+
+  it("members are independent sessions (own ids, own steps)", () => {
+    const { sessions } = fanoutSquad("outage and etl schema drift");
+    expect(sessions.length).toBe(2);
+    expect(new Set(sessions.map((s) => s.id)).size).toBe(2);
+    proposeTool(sessions[0].id, "read_logs", {});
+    expect(getSession(sessions[0].id)!.steps.length).toBeGreaterThan(getSession(sessions[1].id)!.steps.length);
   });
 });

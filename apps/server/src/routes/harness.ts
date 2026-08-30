@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { isHarnessAvailable, createHarnessSession, createHarnessTurn, getHarnessSession, listHarnessSessions, harnessAgentFor } from "../trueforge/harness.js";
+import { readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { isHarnessAvailable, createHarnessSession, createHarnessTurn, getHarnessSession, listHarnessSessions, harnessAgentFor, listHarnessSkills, registerHarnessSkill } from "../trueforge/harness.js";
 import { classifyIntent, subagentFor } from "../policies/router.js";
 
 export const harnessRouter = Router();
@@ -69,3 +72,47 @@ harnessRouter.post("/sessions/:id/turns", async (req, res) => {
     res.status(502).json({ error: String((e as Error).message ?? e) });
   }
 });
+
+// GET /api/harness/skills — list skills registered with the harness
+harnessRouter.get("/skills", async (_req, res) => {
+  try {
+    const data = await listHarnessSkills();
+    res.json(data);
+  } catch (e: unknown) {
+    res.status(502).json({ error: String((e as Error).message ?? e) });
+  }
+});
+
+// POST /api/harness/skills/register — register every skills/<agent>/SKILL.md with the harness
+const SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../../../skills");
+
+harnessRouter.post("/skills/register", async (_req, res) => {
+  try {
+    const agents = await readdir(SKILLS_DIR, { withFileTypes: true });
+    const results: Array<{ skill: string; ok: boolean; detail?: string }> = [];
+    for (const entry of agents) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const content = await readFile(join(SKILLS_DIR, entry.name, "SKILL.md"), "utf8");
+        const skill = parseSkillMd(entry.name, content);
+        await registerHarnessSkill(skill);
+        results.push({ skill: entry.name, ok: true });
+      } catch (e: unknown) {
+        results.push({ skill: entry.name, ok: false, detail: String((e as Error).message ?? e) });
+      }
+    }
+    res.json({ registered: results.filter((r) => r.ok).length, results });
+  } catch (e: unknown) {
+    res.status(502).json({ error: String((e as Error).message ?? e) });
+  }
+});
+
+/** Minimal SKILL.md frontmatter parser — `name:` and `description:` keys, body preserved. */
+function parseSkillMd(dirName: string, content: string) {
+  const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  const meta = fm?.[1] ?? "";
+  const name = meta.match(/^name:\s*(.+)$/m)?.[1]?.trim() ?? dirName;
+  const description = meta.match(/^description:\s*(.+)$/m)?.[1]?.trim() ?? `${dirName} runbook`;
+  const body = fm ? content.slice(fm[0].length) : content;
+  return { name, description, content: body };
+}

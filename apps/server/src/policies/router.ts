@@ -28,3 +28,15 @@ export function subagentFor(mission: Mission): string {
     default: return "General";
   }
 }
+
+/**
+ * Classify into EVERY matching domain (not just the first hit) — used for
+ * parallel subagent fan-out: a combined prompt spawns one session per domain.
+ */
+export function classifyAll(input: string): Mission[] {
+  const matched: Mission[] = [];
+  for (const [type, re, reason] of PATTERNS) {
+    if (re.test(input)) matched.push({ type, confidence: 0.85, reason });
+  }
+  return matched.length > 0 ? matched : [{ type: "unknown", confidence: 0.3, reason: "no pattern matched — default to general" }];
+}

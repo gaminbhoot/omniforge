@@ -101,6 +101,35 @@ describe("mission lifecycle over HTTP", () => {
     expect(res.body.id).toBe(s.id);
     expect(Array.isArray(res.body.steps)).toBe(true);
   });
+
+  it("resumes a mission on POST /:id/resume (persistent session)", async () => {
+    const s = createSession("outage: restart api-gateway");
+    const res = await request(app).post(`/api/missions/${s.id}/resume`).send({ prompt: "is it still healthy?" });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(s.id);
+    expect(res.body.steps.some((st: any) => st.text === "is it still healthy?")).toBe(true);
+  });
+
+  it("404s a resume on an unknown session and 400s without a prompt", async () => {
+    const missing = await request(app).post("/api/missions/sess_missing/resume").send({ prompt: "x" });
+    expect(missing.status).toBe(404);
+    const s = createSession("etl data");
+    const noPrompt = await request(app).post(`/api/missions/${s.id}/resume`).send({ prompt: 7 });
+    expect(noPrompt.status).toBe(400);
+  });
+
+  it("fans out a parallel squad on POST /squad", async () => {
+    const res = await request(app).post("/api/missions/squad").send({ prompt: "outage on api-gateway and a CVE in lodash" });
+    expect(res.status).toBe(201);
+    expect(res.body.squadId).toMatch(/^squad_/);
+    expect(res.body.sessions.length).toBe(2);
+    expect(new Set(res.body.sessions.map((s: any) => s.squadId))).toEqual(new Set([res.body.squadId]));
+  });
+
+  it("rejects a squad without a string prompt", async () => {
+    const res = await request(app).post("/api/missions/squad").send({ prompt: 9 });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("opt-in API auth (SA-04)", () => {

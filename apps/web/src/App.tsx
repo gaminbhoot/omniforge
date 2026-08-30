@@ -9,7 +9,7 @@ import { ModuleSwitcher } from "./components/ModuleSwitcher";
 import { AgentTimeline } from "./components/AgentTimeline";
 import { TerminalStream } from "./components/TerminalStream";
 import { ApprovalModal } from "./components/ApprovalModal";
-import { createMission, getMission, proposeTool, resolveApproval } from "./lib/api";
+import { createMission, getMission, proposeTool, resolveApproval, resumeMission, createSquad, getHarnessHealth } from "./lib/api";
 import type { Session } from "./lib/api";
 
 const PRESETS: Record<string, { prompt: string; tools: Array<{ tool: string; args: any }> }> = {
@@ -61,6 +61,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const dismissedRef = useRef<string | null>(null);
+  const [harnessOk, setHarnessOk] = useState<boolean | null>(null);
+  const [squad, setSquad] = useState<{ squadId: string; sessions: Session[] } | null>(null);
 
   const [booted, setBooted] = useState(false);
   const [activeSection, setActiveSection] = useState("hero");
@@ -95,6 +97,25 @@ export default function App() {
   useEffect(() => {
     setPrompt(PRESETS[module].prompt);
   }, [module]);
+
+  // TrueForge harness probe — the badge must reflect reality, not marketing
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      try {
+        const h = await getHarnessHealth();
+        if (alive) setHarnessOk(!!h.ok);
+      } catch {
+        if (alive) setHarnessOk(false);
+      }
+    };
+    check();
+    const t = setInterval(check, 15000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -165,14 +186,60 @@ export default function App() {
     }
   }
 
-  async function fireTool(tool: string, args: any) {
+  // Follow-up on the SAME session — persistent harness context, no re-diagnosis
+  async function followUp() {
     if (!session) return;
     setBusy(true);
     try {
-      const s = await proposeTool(session.id, tool, args);
+      const s = await resumeMission(session.id, prompt);
       setSession(s);
       dismissedRef.current = null;
-      if (s.pendingApproval) setApprovalOpen(true);
+    } catch (e: any) {
+      alert(String(e.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Parallel subagent fan-out — one session per matched domain, shared squadId
+  async function dispatchSquad() {
+    setBusy(true);
+    try {
+      const sq = await createSquad(prompt);
+      setSquad(sq);
+      setSession(sq.sessions[0] ?? null);
+      dismissedRef.current = null;
+    } catch (e: any) {
+      alert(String(e.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fireTool(tool: string, args: any) {
+    setBusy(true);
+    try {
+      let currentSession = session;
+      if (!currentSession) {
+        currentSession = await createMission(prompt);
+        setSession(currentSession);
+      }
+      try {
+        const s = await proposeTool(currentSession.id, tool, args);
+        setSession(s);
+        dismissedRef.current = null;
+        if (s.pendingApproval) setApprovalOpen(true);
+      } catch (err: any) {
+        if (String(err?.message ?? "").includes("not found")) {
+          const fresh = await createMission(prompt);
+          const s = await proposeTool(fresh.id, tool, args);
+          setSession(fresh.id === s.id ? s : { ...fresh, steps: s.steps });
+          dismissedRef.current = null;
+          if (s.pendingApproval) setApprovalOpen(true);
+        } else {
+          throw err;
+        }
+      }
     } catch (e: any) {
       alert(String(e.message ?? e));
     } finally {
@@ -276,10 +343,19 @@ export default function App() {
               <div className="panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <ModuleSwitcher active={module} onChange={setModule} />
-                  <span className="font-mono text-[11px] uppercase tracking-[1px] text-white/50">
-                    Subagent: <span className="text-white">{session?.subagent ?? "—"}</span>
-                    {session && ` · ${session.status}`}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <span
+                      className="font-mono text-[11px] uppercase tracking-[1px]"
+                      style={{ color: harnessOk === null ? "rgba(255,255,255,.4)" : harnessOk ? "var(--accent, #4ade80)" : "rgba(255,255,255,.4)" }}
+                      data-cursor-text={harnessOk ? "Harness runtime live" : "Local orchestrator mode"}
+                    >
+                      {`TrueForge: ${harnessOk === null ? "probing…" : harnessOk ? "connected" : "local mode"}`}
+                    </span>
+                    <span className="font-mono text-[11px] uppercase tracking-[1px] text-white/50">
+                      Subagent: <span className="text-white">{session?.subagent ?? "—"}</span>
+                      {session && ` · ${session.status}`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-5">
@@ -291,28 +367,61 @@ export default function App() {
                     className="field mt-2 leading-relaxed"
                     placeholder="Describe the mission…"
                   />
-                  <div className="mt-4 flex items-center gap-4">
+                  <div className="mt-4 flex flex-wrap items-center gap-4">
                     <CrossButton onClick={dispatchMission} disabled={busy || !prompt.trim()} cursorText="Send to orchestrator">
                       {busy ? "Dispatching…" : "▶ Dispatch Mission"}
                     </CrossButton>
-                    {session && <span className="font-mono text-[11px] text-white/40">{session.id}</span>}
+                    <button onClick={followUp} disabled={busy || !session || !prompt.trim()} className="chip-btn" data-cursor-text="Same session">
+                      ↻ Follow-up (same session)
+                    </button>
+                    <button onClick={dispatchSquad} disabled={busy || !prompt.trim()} className="chip-btn" data-cursor-text="Fan out in parallel">
+                      ⚡ Parallel squad
+                    </button>
+                    {session && (
+                      <span className="font-mono text-[11px] text-white/40">
+                        {session.id}
+                        {session.harnessSessionId &&
+                          ` · harness ${session.harnessAgent ?? "agent"} ${session.harnessSessionId.slice(0, 12)}`}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {session && (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {PRESETS[module].tools.map((t) => (
-                      <button key={t.tool} onClick={() => fireTool(t.tool, t.args)} disabled={busy} className="chip-btn" data-cursor-text={`Run ${t.tool}`}>
-                        ▶ {t.tool}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {PRESETS[module].tools.map((t) => (
+                    <button key={t.tool} onClick={() => fireTool(t.tool, t.args)} disabled={busy} className="chip-btn" data-cursor-text={`Run ${t.tool}`}>
+                      ▶ {t.tool}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="panel p-5">
                 <h2 className="text-sm font-normal tracking-[0.08em] uppercase">Agent Timeline</h2>
                 <p className="panel-label mt-1">Live reasoning · tool calls · HITL gates — streams from orchestrator</p>
+                {squad && (
+                  <div className="mt-4 border border-white/10 p-3">
+                    <p className="panel-label">Parallel squad · {squad.squadId} · click to view</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {squad.sessions.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setSession(m)}
+                          className="border px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[1px] transition"
+                          style={{
+                            borderColor: session?.id === m.id ? "var(--accent, #4ade80)" : "rgba(255,255,255,.15)",
+                            color: session?.id === m.id ? "var(--accent, #4ade80)" : "rgba(255,255,255,.6)",
+                          }}
+                          data-cursor-text={`View ${m.subagent}`}
+                        >
+                          {m.subagent}
+                          <br />
+                          <span className="text-white/40">{m.status} · {m.steps.length} steps</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-5">
                   <AgentTimeline steps={session?.steps ?? []} />
                 </div>

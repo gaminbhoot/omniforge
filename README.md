@@ -113,8 +113,11 @@ Three stdio MCP servers expose the tool surface (`packages/mcp-tools`), also imp
 The server integrates with the TrueForge harness through a thin bridge (`apps/server/src/trueforge/harness.ts`):
 
 - Probes harness availability and exposes status at `/api/harness/health`
-- Creates harness sessions and turns for the three registered agents (`ops-forge`, `secur-forge`, `data-forge`)
+- Creates harness sessions and turns for the three registered agents (`ops-forge`, `secur-forge`, `data-forge`) — every mission attaches to a harness session at creation time, and the cockpit shows the live connection status
 - Reads sessions back into the cockpit so harness-side execution appears in the same timeline
+- Registers the `skills/*/SKILL.md` runbooks with the harness (`POST /api/harness/skills/register`)
+- Persistent sessions: a follow-up mission (`POST /api/missions/:id/resume`) appends a turn to the same harness session, so context carries without re-diagnosis
+- Parallel fan-out (`POST /api/missions/squad`): a combined mission spawns one session per matched domain, each with its own harness session
 - When the harness is not running, the local orchestrator handles missions so the platform remains fully functional in development
 
 ## Web Cockpit
@@ -162,8 +165,10 @@ Configuration is documented in `.env.example`. LLM provider keys are managed in 
 |--------|------|-------------|
 | GET | `/api/health` | Server health check |
 | POST | `/api/missions` | `{prompt}` — create a mission; auto-classifies to a subagent |
+| POST | `/api/missions/squad` | `{prompt}` — parallel subagent fan-out; one session per matched domain, shared `squadId` |
 | GET | `/api/missions` | List sessions |
 | GET | `/api/missions/:id` | Get session and steps |
+| POST | `/api/missions/:id/resume` | `{prompt}` — follow-up on the same mission; the harness session receives a new turn so context persists |
 | POST | `/api/missions/:id/tools` | `{tool, args}` — auto-executes at LOW/MEDIUM risk; HIGH/CRITICAL returns `pendingApproval` |
 | POST | `/api/missions/:id/approval` | `{approved, feedback?}` — resolve a pending HITL gate |
 | GET | `/api/stream/:id` | SSE stream of session steps |
@@ -172,6 +177,8 @@ Configuration is documented in `.env.example`. LLM provider keys are managed in 
 | GET / POST | `/api/harness/sessions` | List / create harness sessions |
 | GET | `/api/harness/sessions/:id` | Read a harness session |
 | POST | `/api/harness/sessions/:id/turns` | Create a harness turn |
+| GET | `/api/harness/skills` | List skills registered with the harness |
+| POST | `/api/harness/skills/register` | Register every `skills/<agent>/SKILL.md` with the harness |
 | POST | `/api/verify` | Run the spec verifier against the current diff |
 | POST | `/api/verify/report` | Ingest a verifier verdict (from the monitor daemon) |
 | GET | `/api/verify/latest` | Latest spec-verifier verdict |
@@ -197,6 +204,10 @@ omniforge/
 │   ├── mcp-tools/            # system / security / data MCP servers
 │   ├── sandbox/              # Dockerfile, runner.py, entrypoint.sh
 │   └── verifier/             # 10-check spec verifier (HITL, secrets, isolation, ...)
+├── skills/                     # SKILL.md runbooks registered with the TrueForge harness
+│   ├── ops-forge/              # container outage triage
+│   ├── secur-forge/            # CVE triage and patch
+│   └── data-forge/             # governed ETL and schema validation
 ├── scripts/                  # Verifier runner and install utility
 ├── .github/workflows/        # CI (lint, build, test, sandbox smoke), Qodo review, gitleaks
 ├── docker-compose.yml        # Sandbox (hardened) and optional demo databases
