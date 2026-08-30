@@ -25,21 +25,35 @@ function sh(cmd: string, timeoutMs = 60000): { ok: boolean; out: string; code: n
 function grepDiff(diff: string, re: RegExp): boolean { return re.test(diff); }
 
 /**
- * Added lines from non-prose files only (skips .md and lockfiles).
- * Scanning added code lines avoids false positives from documentation,
- * deleted files, and path headers.
+ * Added lines grouped by the file they belong to (skips prose, lockfiles,
+ * .gitignore, and the verifier itself). Per-file context keeps layer and
+ * isolation checks precise: violations are attributed to real source files.
  */
+const SANDBOX_EXECUTOR_PATHS = /^packages\/(mcp-tools\/src\/shared\/sandboxExec\.ts|sandbox\/)/;
+const VERIFIER_TOOLING_PATHS = /^(packages\/verifier\/|scripts\/)/;
+
+function isProsePath(path: string): boolean {
+  return !path || path.endsWith(".md") || path.endsWith(".json") || path === ".gitignore" || path.startsWith("packages/verifier/src/checks/");
+}
+
+function fileSections(diff: string): Array<{ path: string; added: string }> {
+  return diff
+    .split(/^diff --git /m)
+    .filter(Boolean)
+    .map((s) => {
+      const path = /^a\/(\S+)/.exec(s)?.[1] ?? "";
+      const added = s
+        .split("\n")
+        .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
+        .join("\n");
+      return { path, added };
+    })
+    .filter((f) => !isProsePath(f.path));
+}
+
 function addedCodeDiff(diff: string): string {
-  const sections = diff.split(/^diff --git /m).filter(Boolean);
-  const kept = sections.filter((s) => {
-    const path = /^a\/(\S+)/.exec(s)?.[1] ?? "";
-    if (!path || path.endsWith(".md") || path.endsWith(".json") || path === ".gitignore") return false;
-    if (path.startsWith("packages/verifier/src/checks/")) return false;
-    return true;
-  });
-  return kept
-    .flatMap((s) => s.split("\n"))
-    .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
+  return fileSections(diff)
+    .map((f) => f.added)
     .join("\n");
 }
 function grepRepo(pattern: RegExp, globs: string[]): string[] {
@@ -153,15 +167,19 @@ export function checkSandboxIsolation(diff: string): CheckResult {
   const hitlSrc = existsSync("apps/server/src/policies/hitl.ts") ? readFileSync("apps/server/src/policies/hitl.ts","utf-8") : "";
   if (hitlSrc && !hitlSrc.includes('executionMode: "sandbox"')) { status = "warn"; evidence.push("hitl.ts missing sandbox executionMode for MEDIUM"); }
 
-  // Dangerous: raw child_process / exec outside sandboxExec
+  // Dangerous: raw child_process / exec outside the sandbox executors.
+  // Analyzed per file: a file is exempt only if it IS a sanctioned executor
+  // (sandboxExec.ts, sandbox package) or verifier tooling — never globally.
   const dangerous = [/child_process/, /execSync\s*\(/, /spawn\s*\(/, /Docker.*host/i];
-  const code = addedCodeDiff(diff);
-  const diffHasDangerous = dangerous.some((re) => re.test(code));
-  const usesSandboxExec = code.includes("sandboxExec") || existsSync("packages/mcp-tools/src/shared/sandboxExec.ts");
-  if (diffHasDangerous && !usesSandboxExec) {
-    // allow if it's in verifier/scripts itself
-    const isVerifierOnly = diff.split("\n").every(l => l.includes("packages/verifier") || l.includes("scripts/codex-monitor"));
-    if (!isVerifierOnly) { status = "fail"; evidence.push("DIFF uses raw exec/child_process without sandboxExec — must go through sandbox"); }
+  const execViolations: string[] = [];
+  for (const f of fileSections(diff)) {
+    if (SANDBOX_EXECUTOR_PATHS.test(f.path) || VERIFIER_TOOLING_PATHS.test(f.path)) continue;
+    const hit = dangerous.find((re) => re.test(f.added));
+    if (hit) execViolations.push(`${f.path} adds raw exec (${hit.source}) outside sandboxExec`);
+  }
+  if (execViolations.length) {
+    status = "fail";
+    evidence.push(...execViolations);
   } else evidence.push("No raw host exec outside sandboxExec in diff");
   // runner.py contract check hint
   if (existsSync("packages/sandbox/runner.py")) evidence.push("sandbox runner present");
@@ -172,12 +190,19 @@ export function checkSandboxIsolation(diff: string): CheckResult {
 export function checkArchLayers(diff: string): CheckResult {
   const t0 = Date.now();
   const violations: string[] = [];
-  const code = addedCodeDiff(diff);
-  // Simple layer guard: web should not import server internals, mcp-tools should not import web
-  if (/from\s+["'].*apps\/server.*["']/.test(code) && code.includes("apps/web")) violations.push("web imports server internals");
-  if (/from\s+["'].*apps\/web.*["']/.test(code) && code.includes("packages/mcp-tools")) violations.push("mcp-tools imports web");
-  // UI components should not call sandbox directly — must go via server API
-  if (/sandboxExec|runner\.py/.test(code) && code.includes("apps/web/src/components")) violations.push("web component directly uses sandboxExec");
+  // Simple layer guard, per file: web must not import server internals,
+  // mcp-tools must not import web, UI components must not touch the sandbox.
+  for (const f of fileSections(diff)) {
+    if (/from\s+["'].*apps\/server.*["']/.test(f.added) && f.path.startsWith("apps/web")) {
+      violations.push(`${f.path} imports server internals`);
+    }
+    if (/from\s+["'].*apps\/web.*["']/.test(f.added) && f.path.startsWith("packages/mcp-tools")) {
+      violations.push(`${f.path} imports web`);
+    }
+    if (/sandboxExec|runner\.py/.test(f.added) && f.path.startsWith("apps/web/src/components")) {
+      violations.push(`${f.path} uses sandbox directly`);
+    }
+  }
   return {
     id: "arch-layers", label: "5-layer architecture respected", status: violations.length ? "fail" : "pass", severity: "high",
     specRef: "ARCH:§ System Architecture", evidence: violations.length ? violations.join(" | ") : "No layer violations in diff", durationMs: Date.now()-t0,
