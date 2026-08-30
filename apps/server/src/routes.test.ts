@@ -60,16 +60,15 @@ describe("mission lifecycle over HTTP", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("running");
 
-    // audit trail on disk
+    // audit trail on disk — the approval transition must be durably recorded
     const { readFileSync, existsSync } = await import("node:fs");
     const { join } = await import("node:path");
     const p = join(process.cwd(), "session_cache", "audit.jsonl");
-    if (existsSync(p)) {
-      const lines = readFileSync(p, "utf-8").trim().split("\n");
-      const last = JSON.parse(lines[lines.length - 1]);
-      expect(last.sessionId).toBe(s.id);
-      expect(last.decision).toBe("approved");
-    }
+    expect(existsSync(p)).toBe(true);
+    const lines = readFileSync(p, "utf-8").trim().split("\n");
+    const last = JSON.parse(lines[lines.length - 1]);
+    expect(last.sessionId).toBe(s.id);
+    expect(last.decision).toBe("approved");
   });
 
   it("rejects malformed tool proposals", async () => {
@@ -173,7 +172,7 @@ describe("SSE stream (GET /api/stream/:id)", () => {
       expect(chunk).toContain(s.id);
       controller.abort(); // client disconnect — server must clear the interval
     } finally {
-      server.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });
@@ -186,13 +185,24 @@ describe("harness bridge routes (no harness running -> graceful 502)", () => {
     expect(res.body.url).toBeDefined();
   });
 
-  it("returns 502 (not a crash) when the harness is unreachable", async () => {
+  it("returns 502 (not a crash) when the harness is unreachable — never mutates a live harness", async () => {
+    const health = await request(app).get("/api/harness/health");
+    expect(health.status).toBe(200);
+    if (health.body.ok === true) {
+      // A live harness is running: verify read-only paths only — the mutating
+      // POST must never be exercised against real harness data from tests.
+      const sessions = await request(app).get("/api/harness/sessions");
+      expect(sessions.status).toBe(200);
+      return;
+    }
+    // No harness: every proxied route degrades to 502, and the mutating POST
+    // fails closed without creating anything.
     const agents = await request(app).get("/api/harness/agents");
-    expect([200, 502]).toContain(agents.status); // 502 without a harness, 200 if one is up
+    expect(agents.status).toBe(502);
     const sessions = await request(app).get("/api/harness/sessions");
-    expect([200, 502]).toContain(sessions.status);
+    expect(sessions.status).toBe(502);
     const created = await request(app).post("/api/harness/sessions").send({ prompt: "outage: restart api-gateway" });
-    expect([201, 502]).toContain(created.status);
+    expect(created.status).toBe(502);
   });
 });
 
