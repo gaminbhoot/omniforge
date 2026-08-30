@@ -33,6 +33,9 @@ export type Session = {
 
 const sessions = new Map<string, Session>();
 
+/** Bound the in-memory session store (SA-12) — evict oldest beyond the cap. */
+const MAX_SESSIONS = 200;
+
 /** Auto-reject expired HITL gates (US-11: 5 minutes). Called on every read/write. */
 function sweepExpiredApproval(session: Session): void {
   const req = session.pendingApproval;
@@ -63,6 +66,11 @@ export function createSession(userInput: string): Session {
   const mission = classifyIntent(userInput);
   const subagent = subagentFor(mission);
   const id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  while (sessions.size >= MAX_SESSIONS) {
+    const oldest = sessions.keys().next().value as string | undefined;
+    if (!oldest) break;
+    sessions.delete(oldest);
+  }
   const session: Session = {
     id,
     mission,
@@ -162,10 +170,10 @@ const REPLANS: Record<string, { text: string; suggest?: { tool: string; args: Re
     },
   },
   execute_write: {
-    text: "replanning: preparing a dry-run preview of the exact statements so nothing touches the target until reviewed",
+    text: "replanning: previewing the affected rows with a read-only query so nothing touches the target until reviewed",
     suggest: {
-      tool: "execute_write",
-      args: { sql: "SELECT * FROM staging.orders LIMIT 10  -- dry-run preview", connection: "postgres", dryRun: true },
+      tool: "query_readonly",
+      args: { sql: "SELECT * FROM staging.orders LIMIT 10", connection: "postgres" },
     },
   },
 };
@@ -183,7 +191,7 @@ export function resolveApproval(sessionId: string, approved: boolean, feedback?:
     session.steps.push({
       id: stepId(),
       role: "agent",
-      text: `Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m for **${req.tool}**.`,
+      text: `Auto-rejected — approval window expired after ${APPROVAL_TTL_MS / 60000}m for **${req.tool}**. Agent ${GENERIC_REPLAN}.`,
       tool: req.tool,
       args: req.args,
       timestamp: new Date().toISOString(),
@@ -264,7 +272,8 @@ function mockOutput(tool: string, _args: Record<string, unknown>): string {
     list_tables: '["users","orders","events"]',
     query_readonly: "| id | name  |\n| 1  | alice |\n| 2  | bob   |",
     run_etl_script: '{"exitCode":0,"stdout":"transformed 1200 rows"}',
-    execute_write: "write executed (mock)",
+    execute_write: "write executed (simulated — target system untouched)",
+    validate_schema: JSON.stringify({ table: "orders", columnsExpected: 6, columnsFound: 6, drift: "none", status: "valid" }, null, 2),
   };
   return mocks[tool] ?? `[mock output for ${tool}]`;
 }

@@ -18,11 +18,18 @@ streamRouter.get("/:id", (req, res) => {
 
   const send = () => {
     const s = getSession(req.params.id);
-    if (!s) return;
-    res.write(`data: ${JSON.stringify(s)}\n\n`);
+    if (s) res.write(`data: ${JSON.stringify(s)}\n\n`);
   };
 
   send();
-  const interval = setInterval(send, 1500);
+  const interval = setInterval(() => {
+    const s = getSession(req.params.id);
+    if (!s) {
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+    res.write(`data: ${JSON.stringify(s)}\n\n`);
+  }, 1500);
   req.on("close", () => clearInterval(interval));
 });

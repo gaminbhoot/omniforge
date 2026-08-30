@@ -1,7 +1,15 @@
 const BASE = "";
 
+// When the server runs with OMNIFORGE_TOKEN set, mutating requests must carry
+// it. The cockpit picks it up from VITE_OMNIFORGE_TOKEN at build/dev time.
+const API_TOKEN = (import.meta as any).env?.VITE_OMNIFORGE_TOKEN as string | undefined;
+
 async function request(path: string, init?: RequestInit): Promise<any> {
-  const r = await fetch(`${BASE}${path}`, init);
+  const headers: Record<string, string> = {
+    ...((init?.headers as Record<string, string>) ?? {}),
+    ...(API_TOKEN ? { "X-API-Key": API_TOKEN } : {}),
+  };
+  const r = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!r.ok) {
     let msg = `HTTP ${r.status}`;
     try {
