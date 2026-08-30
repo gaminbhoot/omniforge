@@ -19,7 +19,7 @@ app.use(express.json({ limit: "1mb" }));
 
 // Opt-in API auth (SA-04): when OMNIFORGE_TOKEN is set, every mutating (non-GET)
 // request must present it as the X-API-Key header. Unset (default) keeps
-// zero-configuration localhost development and judge setups working.
+// zero-configuration local development.
 const API_TOKEN = process.env.OMNIFORGE_TOKEN;
 if (API_TOKEN) {
   app.use((req, res, next) => {
